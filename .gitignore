@@ -1,0 +1,10 @@
+out/
+data/raw/
+KILL
+.env
+__pycache__/
+*.pyc
+*.tmp.*
+report/*.aux
+report/*.log
+report/*.out
