@@ -13,6 +13,7 @@ def main(argv=None) -> int:
     r.add_argument("--source-dir", type=Path, help="use saved raw payloads instead of the live API")
     a = sub.add_parser("approve", help="human gate: publish a validated run")
     a.add_argument("run_dir", type=Path)
+    a.add_argument("--allow-flagged", action="store_true", help="publish although official text was withheld/flagged")
     dm = sub.add_parser("demo", help="build out/demo.html (all stages, all fixtures) and open it")
     dm.add_argument("--backend", choices=["template", "claude"], default="template")
     dm.add_argument("--no-open", action="store_true")
@@ -29,7 +30,7 @@ def main(argv=None) -> int:
             if not args.no_open:
                 demo.open_in_browser(path)
         elif args.cmd == "approve":
-            print(f"PUBLISHED {pipeline.approve(args.run_dir)}")
+            print(f"PUBLISHED {pipeline.approve(args.run_dir, args.allow_flagged)}")
         else:
             state = "ENGAGED" if config.KILL_FILE.exists() else "off"
             print("kill switch:", state, "| failure streak:", pipeline._streak())

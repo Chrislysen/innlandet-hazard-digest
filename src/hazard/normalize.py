@@ -34,11 +34,19 @@ class Item:
     def to_dict(self):
         return asdict(self)
 
+    def to_model_dict(self):
+        """Bounded input for the agent: capped texts only. Complete official text stays out of the prompt."""
+        d = asdict(self)
+        d.pop("official")
+        return d
+
 
 def normalize(raw: dict[str, dict]) -> tuple[list[Item], dict]:
     """Return (items, stats). Only county 34 and level >= MIN_LEVEL survive."""
     items: dict[str, Item] = {}
-    stats = {"municipalities_seen": 0, "warnings_seen": 0, "dropped_green": 0, "dropped_other_county": 0}
+    stats = {"municipalities_seen": 0, "warnings_seen": 0, "dropped_green": 0, "dropped_other_county": 0,
+             "invalid_levels": 0, "valid_by_hazard": {h: 0 for h in raw}}
+    valid_dates: set[str] = set()
     for hazard, payload in raw.items():
         for county in payload["CountyList"]:
             if county["Id"] != config.COUNTY_ID:
@@ -46,12 +54,18 @@ def normalize(raw: dict[str, dict]) -> tuple[list[Item], dict]:
                 continue
             for m in county["MunicipalityList"] or []:
                 stats["municipalities_seen"] += 1
+                assessed = False
                 for w in m.get("WarningList") or []:
                     stats["warnings_seen"] += 1
                     try:
                         level = int(w.get("ActivityLevel"))
                     except (TypeError, ValueError):
-                        continue  # malformed level: never guess
+                        level = 0
+                    if not 1 <= level <= 4:  # missing, unassessed (0) or malformed: never guess, never count as green
+                        stats["invalid_levels"] += 1
+                        continue
+                    assessed = True
+                    valid_dates.add((w.get("ValidFrom") or "")[:10])
                     if level < config.MIN_LEVEL:
                         stats["dropped_green"] += 1
                         continue
@@ -77,6 +91,9 @@ def normalize(raw: dict[str, dict]) -> tuple[list[Item], dict]:
                     elif any(full[k] for k, _ in _OFFICIAL_FIELDS):
                         full["dates"] = [d]
                         it.official.append(full)
+                if assessed:
+                    stats["valid_by_hazard"][hazard] += 1
+    stats["valid_dates"] = sorted(d for d in valid_dates if d)
     out = sorted(items.values(), key=lambda i: (-i.max_level, i.municipality_name, i.hazard))
     for it in out:
         it.days.sort(key=lambda x: x["date"])

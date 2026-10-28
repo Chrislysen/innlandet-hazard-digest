@@ -4,7 +4,7 @@ import html
 import webbrowser
 from datetime import date
 
-from . import config, draft as draft_mod, fetch, normalize, validate
+from . import config, draft as draft_mod, fetch, normalize, pipeline, validate
 
 SCENARIOS = [
     ("historical_hamar_2023", "Real historical warning (archived replay)",
@@ -35,6 +35,8 @@ td,th{border:1px solid #d5d9e0;padding:.3rem .5rem;text-align:left;vertical-alig
 def _official(it):
     if not it.official:
         return ""
+    if validate.official_flags(it):
+        return "<p class=\"bad\">Official text withheld: it contains a link or instruction-like text. Read the original at varsom.no.</p>"
     rows = "".join(f"<p><b>{html.escape(k)}:</b> {html.escape(o[k])}</p>"
                    for o in it.official for k in ("main", "warning", "advice", "consequence") if o[k])
     return f"<details><summary>Complete official NVE text (unaltered, Norwegian)</summary>{rows}</details>"
@@ -43,7 +45,8 @@ def _official(it):
 def _scenario(name, title, note, backend):
     raw = fetch.load_dir(config.ROOT / "data" / "fixtures" / name)
     items, stats = normalize.normalize(raw)
-    out = [f"<h2>{html.escape(title)}</h2><p>{html.escape(note)}</p>",
+    label = pipeline.fixture_label(config.ROOT / "data" / "fixtures" / name)
+    out = [f"<h2>{html.escape(title)}</h2><p><b>{html.escape(label)}</b></p><p>{html.escape(note)}</p>",
            f"<p><small>Stage 1-2: {stats['municipalities_seen']} municipality records read, "
            f"{stats['dropped_green']} green warnings dropped, <b>{len(items)} item(s) kept</b>.</small></p>"]
     if not items:
@@ -83,7 +86,7 @@ def _attacks():
 
 def build(backend: str = "template") -> "Path":
     flow = [("1 fetch", "NVE Varsom API, 3-day outlook", False), ("2 normalize", "Innlandet only, level 2+", False),
-            ("3 draft", "AI agent writes NO + EN (no tools)", False), ("4 validate", "Code checks every fact", False),
+            ("3 draft", "AI agent writes NO + EN (no tools)", False), ("4 validate", "Code checks level, dates, numbers, links", False),
             ("5 approve", "A human publishes", True)]
     boxes = "".join(f'<div class="st{" h" if h else ""}"><b>{a}</b><br>{b}</div>' for a, b, h in flow)
     body = "".join(_scenario(n, t, d, backend) for n, t, d in SCENARIOS) + _attacks()

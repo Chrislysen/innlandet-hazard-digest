@@ -1,7 +1,9 @@
 import copy
+import json
 import os
 import shutil
 import sys
+import tempfile
 import unittest
 from pathlib import Path
 
@@ -10,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from datetime import date
 
-from hazard import draft, fetch, normalize, pipeline, validate  # noqa: E402
+from hazard import config, draft, fetch, normalize, pipeline, validate  # noqa: E402
 
 FIX = ROOT / "data" / "fixtures"
 
@@ -137,6 +139,159 @@ class InjectionFixtureTests(unittest.TestCase):
         d = draft.draft_template(items)
         self.assertTrue(validate.validate(items, d).ok)
         self.assertNotIn("evil", str(d))
+
+
+
+def quality(raw, today=None):
+    _, stats = normalize.normalize(raw)
+    pipeline.check_data_quality(stats, today)
+
+
+class MissingDataIsNotAllClearTests(unittest.TestCase):
+    def raw(self):
+        return fetch.load_dir(FIX / "real_green")
+
+    def _edit_innlandet(self, raw, fn):
+        for payload in raw.values():
+            for c in payload["CountyList"]:
+                if c["Id"] == "34":
+                    for m in c["MunicipalityList"]:
+                        fn(m)
+
+    def test_baseline_passes(self):
+        quality(self.raw())
+
+    def test_warning_lists_removed(self):
+        raw = self.raw()
+        self._edit_innlandet(raw, lambda m: m.update(WarningList=[]))
+        with self.assertRaises(pipeline.DataQualityError):
+            quality(raw)
+
+    def test_unassessed_level_zero(self):
+        raw = self.raw()
+        self._edit_innlandet(raw, lambda m: [w.update(ActivityLevel="0") for w in m["WarningList"]])
+        with self.assertRaises(pipeline.DataQualityError):
+            quality(raw)
+
+    def test_invalid_levels(self):
+        raw = self.raw()
+        self._edit_innlandet(raw, lambda m: [w.update(ActivityLevel="x") for w in m["WarningList"]])
+        with self.assertRaises(pipeline.DataQualityError):
+            quality(raw)
+
+    def test_stale_feed_in_live_mode(self):
+        with self.assertRaises(pipeline.DataQualityError):
+            quality(self.raw(), today=date(2026, 11, 20))  # snapshot only covers late October
+        quality(self.raw(), today=date(2026, 10, 28))
+
+
+class ValidatorGapsTests(unittest.TestCase):
+    def setUp(self):
+        self.items, _ = items_for("synthetic_orange")
+        self.good = draft.draft_template(self.items)
+
+    def check(self, **fields):
+        d = copy.deepcopy(self.good)
+        d["entries"][0].update(fields)
+        return validate.validate(self.items, d)
+
+    def test_lookalike_host_is_rejected(self):
+        r = self.check(text_en="Hamar: orange flood warning, see https://varsom.no.evil-example.com/x for details.")
+        self.assertTrue(any("link" in p for p in r.problems))
+
+    def test_host_rules(self):
+        self.assertTrue(validate.host_allowed("https://www.varsom.no/flom-og-jordskred/"))
+        self.assertFalse(validate.host_allowed("https://varsom.no.evil-example.com"))
+        self.assertFalse(validate.host_allowed("https://evil-varsom.no"))
+
+    def test_invalid_iso_date(self):
+        r = self.check(text_en="Hamar: orange flood warning valid 2026-11-30 (NVE/Varsom).")
+        self.assertTrue(any("date" in p for p in r.problems))
+
+    def test_invalid_day_month(self):
+        r = self.check(text_nb="Hamar: oransje varsel om flom 31. oktober (NVE/Varsom).")
+        self.assertTrue(any("date" in p for p in r.problems))
+
+    def test_invented_evacuation_advice(self):
+        r = self.check(text_en="Hamar: orange flood warning. Residents should evacuate immediately.")
+        self.assertTrue(any("advice/reassurance" in p for p in r.problems))
+
+    def test_false_reassurance(self):
+        r = self.check(text_en="Hamar: orange flood warning, but the town is safe and there is no danger.")
+        self.assertTrue(any("advice/reassurance" in p for p in r.problems))
+
+
+class FinalOutputTests(unittest.TestCase):
+    """The injection text must not reach the final Markdown or HTML, and both formats carry every label."""
+
+    def render_both(self, name, today=date(2026, 10, 28)):
+        items, _ = items_for(name)
+        d = draft.draft_template(items)
+        flags = {i.id: f for i in items if (f := validate.official_flags(i))}
+        label = pipeline.fixture_label(FIX / name)
+        return (pipeline.render(items, d, today, label, flags), pipeline.render_html(items, d, today, label, flags))
+
+    def test_injection_is_withheld_in_both_formats(self):
+        for out in self.render_both("synthetic_injection"):
+            self.assertNotIn("evil-example", out)
+            self.assertNotIn("IGNORE PREVIOUS", out)
+            self.assertIn("withheld", out)
+            self.assertIn("SYNTHETIC TEST DATA", out)
+            self.assertEqual(validate.check_rendered(out), [])
+
+    def test_historical_html_matches_markdown_corrections(self):
+        for out in self.render_both("historical_hamar_2023"):
+            self.assertIn("ARCHIVED REPLAY", out)
+            self.assertIn("HISTORICAL REPLAY", out)
+            self.assertIn("Unofficial English summary", out)
+            self.assertIn("Gjentaksintervallet er mer enn 5 år", out)  # complete official text present
+            self.assertEqual(validate.check_rendered(out), [])
+
+    def test_synthetic_orange_is_labelled(self):
+        for out in self.render_both("synthetic_orange"):
+            self.assertIn("SYNTHETIC TEST DATA", out)
+
+    def test_output_gate_catches_a_foreign_link(self):
+        self.assertTrue(validate.check_rendered("see www.evil-example.com"))
+
+
+class RunBudgetAndContextTests(unittest.TestCase):
+    def test_budget_is_shared_across_attempts(self):
+        calls = []
+
+        def expensive_bad(items, feedback=None, budget=None):
+            calls.append(budget)
+            d = draft.draft_template(items)
+            d["entries"][0]["max_level"] = 4  # always rejected
+            d["cost_usd"] = 0.24
+            d["backend"] = "fake"
+            return d
+
+        with tempfile.TemporaryDirectory() as tmp:
+            old = (config.OUT_DIR, config.FAILURE_STREAK_FILE, config.KILL_FILE)
+            config.OUT_DIR = Path(tmp) / "out"
+            config.FAILURE_STREAK_FILE = config.OUT_DIR / ".streak"
+            config.KILL_FILE = Path(tmp) / "KILL"
+            pipeline.draft_mod.BACKENDS["fake"] = expensive_bad
+            try:
+                run_dir = pipeline.run("fake", FIX / "synthetic_orange")
+                log = json.loads((run_dir / "log.json").read_text(encoding="utf-8"))
+            finally:
+                del pipeline.draft_mod.BACKENDS["fake"]
+                config.OUT_DIR, config.FAILURE_STREAK_FILE, config.KILL_FILE = old
+        self.assertEqual(len(calls), 1)  # the second attempt must NOT get a fresh allowance
+        self.assertLessEqual(log["total_cost_usd"], config.MAX_BUDGET_USD)
+        self.assertTrue(log["degraded"])  # fell back to the deterministic template
+
+    def test_all_context_files_are_loaded(self):
+        text = draft.load_context()
+        for marker in ("RULES", "STYLE GUIDE", "GLOSSARY", "jordskred"):
+            self.assertIn(marker, text)
+
+    def test_model_input_excludes_complete_official_text(self):
+        items, _ = items_for("historical_hamar_2023")
+        self.assertNotIn("official", items[0].to_model_dict())
+        self.assertIn("official", items[0].to_dict())  # but it is retained for display
 
 
 @unittest.skipUnless(shutil.which("claude") and os.environ.get("RUN_LIVE_TESTS"),

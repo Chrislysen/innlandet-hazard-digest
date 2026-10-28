@@ -18,6 +18,7 @@ out = FIX / "historical_hamar_2023"
 out.mkdir(parents=True, exist_ok=True)
 (out / "flood.json").write_text(json.dumps(flood, ensure_ascii=False), encoding="utf-8")
 (out / "landslide.json").write_text((FIX / "real_green/landslide.json").read_text(encoding="utf-8"), encoding="utf-8")
-(out / "README.md").write_text("HISTORICAL replay: real NVE warning for Hamar, orange flood, valid 2023-08-10 "
-                               "(see data/evidence). Everything else is the green snapshot from 2026-10-28.\n", encoding="utf-8")
+(out / "label.txt").write_text(
+    "HISTORICAL REPLAY: a genuine NVE warning (Hamar, orange flood, valid 2023-08-10) inserted into a "
+    "2026-10-28 all-green background. Not a current warning." + chr(10), encoding="utf-8")
 print("wrote", out)

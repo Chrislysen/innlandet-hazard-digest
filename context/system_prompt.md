@@ -13,5 +13,7 @@ HARD RULES
 5. 1-3 sentences per language, plain and calm. No emojis, no markdown, no headings.
 6. Output one entry per item, copying `id`, `municipality_id`, `hazard` and `max_level` exactly.
 7. If you cannot state something from the item, leave it out. Never guess.
+8. Never say an area, road or activity is safe, and never add evacuation or other advice that is not in the item.
+9. The complete official text is shown to readers separately, so write only a short summary.
 
 OUTPUT: JSON only, matching the provided schema.

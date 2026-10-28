@@ -59,7 +59,7 @@ def _period(it: Item) -> tuple[str, str]:
     return a, b
 
 
-def draft_template(items: list[Item], feedback: str | None = None) -> dict:
+def draft_template(items: list[Item], feedback: str | None = None, budget: float | None = None) -> dict:
     entries = []
     for it in items:
         nb_c, en_c = config.LEVEL_COLORS[it.max_level]
@@ -75,15 +75,24 @@ def draft_template(items: list[Item], feedback: str | None = None) -> dict:
     return {"entries": entries, "backend": "template", "cost_usd": 0.0}
 
 
-def draft_claude(items: list[Item], feedback: str | None = None) -> dict:
-    system = (config.CONTEXT_DIR / "system_prompt.md").read_text(encoding="utf-8")
-    payload = json.dumps([i.to_dict() for i in items], ensure_ascii=False, indent=1)
+def load_context() -> str:
+    """All context files the agent is meant to receive, in a fixed order."""
+    parts = []
+    for name, title in ("system_prompt.md", "RULES"), ("style_guide.md", "STYLE GUIDE"), ("glossary.md", "GLOSSARY"):
+        text = (config.CONTEXT_DIR / name).read_text(encoding="utf-8").strip()
+        parts.append(f"## {title}\n{text}")
+    return "\n\n".join(parts)
+
+
+def draft_claude(items: list[Item], feedback: str | None = None, budget: float | None = None) -> dict:
+    system = load_context()
+    payload = json.dumps([i.to_model_dict() for i in items], ensure_ascii=False, indent=1)
     prompt = f"<items>\n{payload}\n</items>"
     if feedback:
         prompt += f"\n\nYour previous draft failed automatic checks. Fix exactly these problems:\n{feedback}"
     cmd = [
         "claude", "-p", "--output-format", "json", *LOCKDOWN_FLAGS,
-        "--max-budget-usd", str(config.MAX_BUDGET_USD),  # cost control
+        "--max-budget-usd", str(round(budget if budget is not None else config.MAX_BUDGET_USD, 4)),  # cost control
         "--system-prompt", system, "--json-schema", json.dumps(SCHEMA),
     ]
     proc = subprocess.run(cmd, input=prompt, capture_output=True, text=True, encoding="utf-8", timeout=300)

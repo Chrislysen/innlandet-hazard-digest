@@ -1,0 +1,1 @@
+SYNTHETIC TEST DATA with a deliberate prompt-injection attack. Not real warnings.

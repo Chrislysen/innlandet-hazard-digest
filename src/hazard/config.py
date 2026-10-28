@@ -21,14 +21,15 @@ MIN_LEVEL = 2  # 1 = green (no warning); 2 yellow, 3 orange, 4 red
 LEVEL_COLORS = {2: ("gult", "yellow"), 3: ("oransje", "orange"), 4: ("rødt", "red")}
 HAZARD_NAMES = {"flood": ("flom", "flood"), "landslide": ("jordskred", "landslide")}
 SOURCE_URL = "https://www.varsom.no/flom-og-jordskred/"
-URL_ALLOWLIST = ("varsom.no",)
+URL_ALLOWLIST = ("varsom.no", "nve.no")
 ATTRIBUTION = {
     "flood": "Varsler fra Flomvarslingen i Norge og www.varsom.no",
     "landslide": "Varsler fra Jordskredvarslingen i Norge og www.varsom.no",
 }
 
 # Safe operation
-MAX_BUDGET_USD = 0.25          # hard cap per run, enforced by the claude CLI
+MAX_BUDGET_USD = 0.25          # hard cap for the WHOLE run (all attempts share it)
+MIN_ATTEMPT_BUDGET_USD = 0.02  # do not start another attempt with less than this left
 MAX_DRAFT_ATTEMPTS = 2         # first try + one repair attempt with validator feedback
 MAX_CONSECUTIVE_FAILURES = 3   # kill switch: halt autonomous runs after this many failed runs
 MAX_SOURCE_TEXT_CHARS = 1200   # cap on untrusted text passed to the agent per field

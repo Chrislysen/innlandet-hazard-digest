@@ -7,10 +7,13 @@ from pathlib import Path
 from . import config, fetch, normalize, draft as draft_mod, validate as validate_mod
 
 FOOTER_NB = "Kilde: NVE/Varsom, {src}. Varselet er veiledende. Ved fare for liv og helse, ring 110/112."
+FOOTER_EN = "Source: NVE/Varsom, {src}. Advisory only. In an emergency call 110/112."
 UNOFFICIAL_EN = "(Unofficial English summary; NVE's own English text can differ.)"
+REVIEW_NOTE = "Summary text is machine-written and checked only for listed facts; a person must read it before publication."
 OFFICIAL_LABELS = (("Warning", "main"), ("Situation", "warning"), ("Advice", "advice"),
                    ("Consequences", "consequence"), ("Level meaning", "level_meaning"))
-FOOTER_EN = "Source: NVE/Varsom, {src}. Advisory only. In an emergency call 110/112."
+WITHHELD = ("Official text withheld: it contains a link or instruction-like text that this harness does not "
+            "reproduce. Read the original at https://www.varsom.no/flom-og-jordskred/ .")
 
 
 class Halted(RuntimeError):
@@ -21,12 +24,19 @@ class DataQualityError(RuntimeError):
     pass
 
 
-def check_data_quality(stats: dict):
-    """An empty or truncated feed must never be reported as 'all clear'."""
-    need = config.MIN_MUNICIPALITIES_PER_HAZARD * len(config.HAZARDS)
-    if stats["municipalities_seen"] < need:
-        raise DataQualityError(
-            f"source returned {stats['municipalities_seen']} Innlandet municipality records, expected >= {need}")
+def check_data_quality(stats: dict, today: date | None = None):
+    """Missing, unassessed or stale warning data must never be reported as 'all clear'.
+
+    today=None is replay mode (archived/fixture data): coverage is still required, freshness is not.
+    """
+    need = config.MIN_MUNICIPALITIES_PER_HAZARD
+    for hazard, n in stats["valid_by_hazard"].items():
+        if n < need:
+            raise DataQualityError(
+                f"{hazard}: only {n} municipalities have an assessed warning level, expected >= {need} "
+                f"(missing, unassessed or invalid data is not 'all clear')")
+    if today is not None and today.isoformat() not in stats["valid_dates"]:
+        raise DataQualityError(f"no warning in the feed covers today ({today.isoformat()}); data is stale")
 
 
 def _streak() -> int:
@@ -46,9 +56,30 @@ def check_kill_switch():
         raise Halted(f"kill switch engaged ({config.KILL_FILE.name} exists). Fix the cause, then delete it.")
 
 
-def render(items, draft: dict, today: date) -> str:
+def fixture_label(source_dir: Path | None) -> str | None:
+    if source_dir is None:
+        return None
+    f = Path(source_dir) / "label.txt"
+    return f.read_text(encoding="utf-8").strip() if f.exists() else "OFFLINE INPUT (not live data)."
+
+
+def facts_line(it) -> str:
+    nb, en = config.LEVEL_COLORS[it.max_level]
+    hz_nb, hz_en = config.HAZARD_NAMES[it.hazard]
+    dates = ", ".join(sorted({d["date"] for d in it.days}))
+    return f"Nivå {it.max_level} ({nb}) / level {it.max_level} ({en}) · {hz_nb} / {hz_en} · gyldig / valid {dates}"
+
+
+def _is_replay(items, today: date) -> bool:
+    return bool(items) and all(d["date"] < today.isoformat() for i in items for d in i.days)
+
+
+def render(items, draft: dict, today: date, label: str | None = None, flags: dict | None = None) -> str:
+    flags = flags or {}
     L = [f"# Innlandet hazard digest — {today.isoformat()}", ""]
-    if items and all(d["date"] < today.isoformat() for i in items for d in i.days):
+    if label:
+        L += [f"> **{label}**", ""]
+    if _is_replay(items, today):
         L += ["> **ARCHIVED REPLAY:** every warning below is dated before today. This is not a current warning.", ""]
     if not items:
         L += ["Ingen flom- eller jordskredvarsler på gult nivå eller høyere i Innlandet de neste tre dagene.",
@@ -58,14 +89,18 @@ def render(items, draft: dict, today: date) -> str:
         for it in items:
             e = by_id[it.id]
             L += [f"## {it.municipality_name} — {it.hazard} (level {it.max_level})",
+                  f"**Facts from source data:** {facts_line(it)}", "",
                   e["text_nb"], "", f"{e['text_en']} {UNOFFICIAL_EN}", ""]
+            if flags.get(it.id):
+                L += [f"**{WITHHELD}**", ""]
+                continue
             for o in it.official:
                 L += [f"**Official NVE text (Norwegian, complete, unaltered)** — valid {', '.join(o['dates'])}:"]
-                for label, key in OFFICIAL_LABELS:
+                for label_, key in OFFICIAL_LABELS:
                     if o[key]:
-                        L += [f"- *{label}:* {o[key]}"]
+                        L += [f"- *{label_}:* {o[key]}"]
                 L += [""]
-    L += ["---", FOOTER_NB.format(src=config.SOURCE_URL), FOOTER_EN.format(src=config.SOURCE_URL),
+    L += ["---", REVIEW_NOTE, FOOTER_NB.format(src=config.SOURCE_URL), FOOTER_EN.format(src=config.SOURCE_URL),
           *sorted({config.ATTRIBUTION[i.hazard] for i in items}),
           f"Generated by backend: {draft.get('backend', 'none')}. Status: PENDING HUMAN APPROVAL."]
     return "\n".join(L) + "\n"
@@ -74,42 +109,64 @@ def render(items, draft: dict, today: date) -> str:
 _BADGE = {2: ("#f2c94c", "#000"), 3: ("#f2994a", "#000"), 4: ("#eb5757", "#fff")}
 
 
-def render_html(items, draft: dict, today: date) -> str:
+def render_html(items, draft: dict, today: date, label: str | None = None, flags: dict | None = None) -> str:
+    flags = flags or {}
     esc = html.escape
+    banners = []
+    if label:
+        banners.append(f'<p class="warn"><b>{esc(label)}</b></p>')
+    if _is_replay(items, today):
+        banners.append('<p class="warn"><b>ARCHIVED REPLAY:</b> every warning below is dated before today. '
+                       "This is not a current warning.</p>")
     cards = []
     by_id = {e["id"]: e for e in draft["entries"]}
     for it in items:
         e = by_id[it.id]
         bg, fg = _BADGE[it.max_level]
-        days = ", ".join(f"{d['date']} (level {d['level']})" for d in it.days)
+        if flags.get(it.id):
+            official = f'<p class="warn"><b>{esc(WITHHELD)}</b></p>'
+        else:
+            rows = "".join(f"<p><b>{esc(k_)}:</b> {esc(o[k])}</p>" for o in it.official
+                           for k_, k in OFFICIAL_LABELS if o[k])
+            official = (f"<details><summary>Official NVE text (Norwegian, complete, unaltered)</summary>{rows}"
+                        "</details>") if rows else ""
         cards.append(
             f'<section><h2>{esc(it.municipality_name)} <span class="b" style="background:{bg};color:{fg}">'
-            f'{esc(it.hazard)} · level {it.max_level}</span></h2><p lang="nb">{esc(e["text_nb"])}</p>'
-            f'<p lang="en">{esc(e["text_en"])}</p><small>{esc(days)}</small></section>')
+            f'{esc(it.hazard)} · level {it.max_level}</span></h2>'
+            f"<p><small><b>Facts from source data:</b> {esc(facts_line(it))}</small></p>"
+            f'<p lang="nb">{esc(e["text_nb"])}</p>'
+            f'<p lang="en">{esc(e["text_en"])} <small>{esc(UNOFFICIAL_EN)}</small></p>{official}</section>')
     body = "".join(cards) or ("<p>Ingen flom- eller jordskredvarsler på gult nivå eller høyere i Innlandet.</p>"
                               "<p>No flood or landslide warnings at yellow level or above in Innlandet.</p>")
+    attribution = "<br>".join(esc(a) for a in sorted({config.ATTRIBUTION[i.hazard] for i in items}))
     return f"""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Innlandet hazard digest {today.isoformat()}</title>
 <style>body{{font:16px/1.5 system-ui,sans-serif;max-width:720px;margin:2rem auto;padding:0 1rem}}
 section{{border:1px solid #ccc;border-radius:8px;padding:.5rem 1rem;margin:1rem 0}}
 .b{{font-size:.7em;padding:.15em .6em;border-radius:1em;vertical-align:middle}}
+.warn{{background:#fff3d6;padding:.4rem .8rem;border-radius:6px}}
 p[lang=en]{{color:#444}}footer{{color:#666;font-size:.85em}}</style>
-<h1>Innlandet hazard digest — {today.isoformat()}</h1>{body}
-<footer><p>{esc(FOOTER_NB.format(src=config.SOURCE_URL))}<br>{esc(FOOTER_EN.format(src=config.SOURCE_URL))}</p>
+<h1>Innlandet hazard digest — {today.isoformat()}</h1>{"".join(banners)}{body}
+<footer><p>{esc(REVIEW_NOTE)}</p><p>{esc(FOOTER_NB.format(src=config.SOURCE_URL))}<br>{esc(FOOTER_EN.format(src=config.SOURCE_URL))}
+<br>{attribution}</p>
 <p>Backend: {esc(str(draft.get("backend")))}. Status: pending human approval.</p></footer></html>"""
 
 
 def run(backend: str = "template", source_dir: Path | None = None, today: date | None = None) -> Path:
     check_kill_switch()
+    live = source_dir is None
     today = today or date.today()
     run_dir = config.OUT_DIR / f"run_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}"
     run_dir.mkdir(parents=True, exist_ok=True)
-    log = {"started": datetime.now().isoformat(timespec="seconds"), "backend_requested": backend, "attempts": []}
+    log = {"started": datetime.now().isoformat(timespec="seconds"), "backend_requested": backend,
+           "mode": "live" if live else "replay", "attempts": [], "total_cost_usd": 0.0}
     try:
-        raw = fetch.load_dir(source_dir) if source_dir else fetch.fetch_all(today)       # stage 1
+        raw = fetch.fetch_all(today) if live else fetch.load_dir(source_dir)             # stage 1
         items, stats = normalize.normalize(raw)                                          # stage 2
         log["stats"] = stats
-        check_data_quality(stats)
+        check_data_quality(stats, today if live else None)
+        flags = {i.id: f for i in items if (f := validate_mod.official_flags(i))}
+        log["flags"] = flags
         (run_dir / "items.json").write_text(
             json.dumps([i.to_dict() for i in items], ensure_ascii=False, indent=1), "utf-8")
         if not items:                                                                    # nothing to say: skip the LLM
@@ -117,13 +174,19 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
             result = validate_mod.validate(items, draft)
         else:
             draft, result = None, None
-            feedback = None
+            feedback, spent = None, 0.0
             for attempt in range(1, config.MAX_DRAFT_ATTEMPTS + 1):                      # stage 3 + 4 with one repair
-                try:
-                    cand = draft_mod.BACKENDS[backend](items, feedback)
-                except Exception as e:  # agent/CLI failure
-                    log["attempts"].append({"n": attempt, "backend": backend, "error": str(e)[:300]})
+                remaining = round(config.MAX_BUDGET_USD - spent, 4)
+                if backend != "template" and remaining < config.MIN_ATTEMPT_BUDGET_USD:
+                    log["attempts"].append({"n": attempt, "backend": backend, "skipped": "run budget exhausted"})
                     break
+                try:
+                    cand = draft_mod.BACKENDS[backend](items, feedback, remaining)
+                except Exception as e:  # agent/CLI failure: assume the whole remaining budget may be gone
+                    log["attempts"].append({"n": attempt, "backend": backend, "error": str(e)[:300]})
+                    spent = config.MAX_BUDGET_USD
+                    break
+                spent += cand.get("cost_usd", 0.0)
                 res = validate_mod.validate(items, cand)
                 log["attempts"].append({"n": attempt, "backend": backend, "ok": res.ok,
                                         "problems": res.problems, "cost_usd": cand.get("cost_usd", 0)})
@@ -131,6 +194,7 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
                     draft, result = cand, res
                     break
                 feedback = res.feedback()
+            log["total_cost_usd"] = round(spent, 4)
             if draft is None and backend != "template":                                  # graceful degradation
                 cand = draft_mod.draft_template(items)
                 res = validate_mod.validate(items, cand)
@@ -140,8 +204,14 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
                     draft, result = cand, res
             if draft is None:
                 raise RuntimeError("no valid draft produced (see log.json)")
-        (run_dir / "digest.md").write_text(render(items, draft, today), "utf-8")
-        (run_dir / "digest.html").write_text(render_html(items, draft, today), "utf-8")
+        label = fixture_label(source_dir)
+        md = render(items, draft, today, label, flags)
+        page = render_html(items, draft, today, label, flags)
+        final_problems = validate_mod.check_rendered(md) + validate_mod.check_rendered(page)
+        if final_problems:
+            raise RuntimeError("final output failed the output gate: " + "; ".join(final_problems[:3]))
+        (run_dir / "digest.md").write_text(md, "utf-8")
+        (run_dir / "digest.html").write_text(page, "utf-8")
         log.update(ok=result.ok, validated_entries=result.checked, status="pending_approval")
         _set_streak(0)
         return run_dir
@@ -156,10 +226,12 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
         (run_dir / "log.json").write_text(json.dumps(log, ensure_ascii=False, indent=1), "utf-8")
 
 
-def approve(run_dir: Path) -> Path:
+def approve(run_dir: Path, allow_flagged: bool = False) -> Path:
     log = json.loads((run_dir / "log.json").read_text("utf-8"))
     if not log.get("ok") or log.get("status") != "pending_approval":
         raise Halted("run is not approvable (failed validation or already handled)")
+    if log.get("flags") and not allow_flagged:
+        raise Halted(f"run has flagged official text for {sorted(log['flags'])}; read the source, then use --allow-flagged")
     pub = config.OUT_DIR / "published"
     pub.mkdir(parents=True, exist_ok=True)
     target = pub / f"{run_dir.name}.md"

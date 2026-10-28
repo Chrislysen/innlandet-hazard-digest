@@ -16,9 +16,17 @@ from hazard import config, fetch  # noqa: E402
 FIX = ROOT / "data" / "fixtures"
 
 
+LABELS = {
+    "real_green": "REAL SNAPSHOT of NVE data captured %s. Everything is green." % date.today().isoformat(),
+    "synthetic_orange": "SYNTHETIC TEST DATA: warnings injected by the project team for testing. Not real warnings.",
+    "synthetic_injection": "SYNTHETIC TEST DATA with a deliberate prompt-injection attack. Not real warnings.",
+}
+
+
 def dump(name: str, raw: dict):
     d = FIX / name
     d.mkdir(parents=True, exist_ok=True)
+    (d / "label.txt").write_text(LABELS[name] + chr(10), encoding="utf-8")
     for h, p in raw.items():
         (d / f"{h}.json").write_text(json.dumps(p, ensure_ascii=False), encoding="utf-8")
 

@@ -1,13 +1,14 @@
 # Innlandet Hazard Digest
 
 Agentic workflow (KIUA-2003, autumn 2026): turns official NVE/Varsom **flood and landslide warnings** for the 46
-municipalities of Innlandet into a **plain-language Norwegian + English digest**, with every fact verified by code
+municipalities of Innlandet into a **plain-language Norwegian + English digest**, with the structured facts (levels, dates, municipalities, numbers, links) verified by code
 before a human approves it. Public data only; no personal data.
 
 ## Pipeline
 `fetch` (NVE API) -> `normalize` (county 34, level >= 2) -> `draft` (LLM agent, no tools, budget-capped; or deterministic template)
--> `validate` (code: exact-match facts, completeness, no invented numbers/links, injection scan) -> **human `approve`**.
-If nothing is at yellow level or above, the LLM is skipped and a deterministic all-clear is produced.
+-> `validate` (code: exact-match fields, completeness, no unsupported numbers/dates/colours/links/advice words, injection scan, final-output gate) -> **human `approve`**.
+Code cannot judge the meaning of free sentences, so a person reads the summary before publishing.
+If nothing is at yellow level or above, the LLM is skipped and a deterministic all-clear is produced. Missing, unassessed (level 0), malformed or stale data fails the run instead of producing an all-clear.
 
 ## Requirements
 - Python 3.11+ (standard library only)
@@ -42,7 +43,7 @@ injected by `scripts/make_fixtures.py` for testing — they are not real warning
 
 ## Official content and attribution
 The agent writes only a short summary. The complete official Norwegian warning text is appended unaltered to every entry; English is an unofficial summary and labelled so (NVE's own English can differ). Timestamps are kept as published.
-`data/fixtures/historical_hamar_2023` replays a **real archived** warning (Hamar, orange flood, 2023-08-10; evidence and hashes in `data/evidence/`); output is marked "ARCHIVED REPLAY".
+`data/fixtures/historical_hamar_2023` inserts a **genuine archived** NVE warning (Hamar, orange flood, valid 2023-08-10; evidence and hashes in `data/evidence/`) into the 2026-10-28 all-green background; output is marked "ARCHIVED REPLAY". Every fixture has a `label.txt` shown in the output (real snapshot / historical replay / synthetic test data). Official text that contains a link or instruction-like text is withheld and flagged; publishing such a run needs `approve --allow-flagged`.
 Data: "Varsler fra Flomvarslingen i Norge og www.varsom.no" / "Varsler fra Jordskredvarslingen i Norge og www.varsom.no". No NVE endorsement is implied.
 
 ## Context files used by the agent
@@ -51,7 +52,7 @@ Data: "Varsler fra Flomvarslingen i Norge og www.varsom.no" / "Varsler fra Jords
 ## Safe operation (summary; details in white paper)
 - **Permission scoping:** agent runs with `--tools "" --strict-mcp-config --setting-sources ""` (no tools/MCP/skills); only the harness touches files and network.
 - **Secrets:** none in repo; the CLI uses the user's own login/env. `.env` is git-ignored.
-- **Cost control:** `--max-budget-usd 0.25` per draft call; max 2 attempts per run.
+- **Cost control:** one USD 0.25 budget shared by all attempts of a run (each attempt gets only the remainder); max 2 attempts.
 - **Human gate:** nothing is published until `approve`; `approve` refuses runs that failed validation.
 - **Kill switch:** `KILL` file halts all runs; auto-engaged after 3 consecutive failed runs (`python -m hazard status`).
 
