@@ -103,7 +103,19 @@ def _is_replay(items, today: date) -> bool:
 
 
 def _span(days):
-    return days[0] if len(days) == 1 else f"{days[0]} – {days[-1]}"
+    """'2026-10-28 – 2026-10-30' only for consecutive days; gaps are listed separately, never bridged."""
+    runs, start, prev = [], None, None
+    for d in days:
+        cur = date.fromisoformat(d)
+        if prev is not None and (cur - prev).days == 1:
+            prev = cur
+            last = d
+            continue
+        if start is not None:
+            runs.append((start, last))
+        start, prev, last = d, cur, d
+    runs.append((start, last))
+    return ", ".join(a if a == b else f"{a} – {b}" for a, b in runs)
 
 
 def render(items, draft: dict, today: date, label: str | None = None, flags: dict | None = None,

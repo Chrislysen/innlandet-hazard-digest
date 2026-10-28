@@ -34,6 +34,7 @@ Format: what failed -> how we noticed -> why (propagation) -> repair -> evidence
 - **First repair was only partial:** it required >= 40 municipalities per hazard with an assessed level and, live, that any warning covered today.
 - **What (round 3):** a third review reproduced that removing Hamar from both hazards, making Hamar's flood level 0, or removing the later forecast days everywhere still produced a successful "next three days" all-clear. Confirmed here: the previous commit (13607c5) accepted all three.
 - **Final repair:** reference list of the 46 expected municipality ids (`data/reference/`); for EVERY hazard each expected id needs an assessed level (1-4) for EVERY expected day (live: today and the next two; replay: the snapshot's baseline days). Otherwise the run fails with a message naming what is missing. The all-clear text states the dates it covers. The synthetic and historical fixtures were rebuilt so the non-warning days stay green.
+- **Round 4 (small):** in replay mode, with 29 Oct removed, the all-clear printed "2026-10-28 – 2026-10-30", implying the missing day was covered. Non-consecutive days are now listed separately and never bridged (`test_replay_gap_in_the_middle_is_not_bridged`, `test_span_formatting`). Live mode already rejected this case.
 - **Proof:** `CoverageIsCompleteTests` (9 tests, incl. the three cases above in live and replay mode); the same three inputs are rejected now and were accepted before.
 
 ## F7 — validator gaps: look-alike links, invented dates, invented advice/reassurance — 2026-10-28

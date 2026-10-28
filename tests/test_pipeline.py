@@ -247,6 +247,29 @@ class CoverageIsCompleteTests(unittest.TestCase):
         self.assertNotIn("three days", text)
         self.assertIn("2026-10-28", text)
 
+    def test_replay_gap_in_the_middle_is_not_bridged(self):
+        raw = self.raw()
+        for c in self.innlandet(raw):
+            for m in c["MunicipalityList"]:
+                m["WarningList"] = [w for w in m["WarningList"] if (w["ValidFrom"] or "")[:10] != "2026-10-29"]
+        days = self.check(raw)
+        self.assertEqual(days, ["2026-10-28", "2026-10-30"])
+        items, _ = normalize.normalize(raw)
+        draft_ = draft.draft_template(items)
+        for out in (pipeline.render(items, draft_, self.TODAY, None, {}, days),
+                    pipeline.render_html(items, draft_, self.TODAY, None, {}, days)):
+            self.assertIn("2026-10-28, 2026-10-30", out)
+            self.assertNotIn("2026-10-28 – 2026-10-30", out)
+            self.assertNotIn("2026-10-29", out)
+        with self.assertRaisesRegex(pipeline.DataQualityError, "2026-10-29"):
+            self.check(raw, self.TODAY)  # live mode rejects the same data
+
+    def test_span_formatting(self):
+        self.assertEqual(pipeline._span(["2026-10-28"]), "2026-10-28")
+        self.assertEqual(pipeline._span(["2026-10-28", "2026-10-29", "2026-10-30"]), "2026-10-28 – 2026-10-30")
+        self.assertEqual(pipeline._span(["2026-10-28", "2026-10-30"]), "2026-10-28, 2026-10-30")
+        self.assertEqual(pipeline._span(["2026-10-28", "2026-10-29", "2026-10-31"]), "2026-10-28 – 2026-10-29, 2026-10-31")
+
     def test_one_municipality_missing_one_day(self):
         raw = self.raw()
         for c in self.innlandet(raw, ("landslide",)):
