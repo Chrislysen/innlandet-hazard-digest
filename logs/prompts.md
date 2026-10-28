@@ -1,7 +1,7 @@
 # Prompt log (representative excerpts; keep raw, curate to max 2 pages for the C2 appendix)
 
 ## P1 — user -> coding agent (problem selection)
-> "Could you conduct a broad search for publicly available data sources and APIs, compare their accessibility, clarity and usability, and recommend the most suitable option for an automated workflow addressing a recurring need in Innlandet?"
+**Task given to the agent:** conduct a broad search for publicly available data sources and APIs, compare their accessibility, clarity and usability, and recommend the most suitable option for an automated workflow addressing a recurring need in Innlandet.
 **Agent action:** probed municipal sites (no feeds), then tested NVE Varsom / MET / Entur APIs live; recommended Varsom hazard digest.
 **Human judgement:** accepted the recommendation; a short check of the municipal sites found no machine-readable feed (not proof that none exists), while NVE's API was open, structured and covered Innlandet by municipality.
 
