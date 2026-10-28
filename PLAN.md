@@ -19,19 +19,19 @@ If stage 2 finds nothing to warn about, stage 3 is skipped (deterministic all-cl
 
 ## Compulsory 2 checklist (PDF section 2) — tick only when really done
 ### Report (3-4 pages, English, NeurIPS preprint template, `\usepackage[preprint]{neurips_2025}`, no checklist section)
-- [ ] Problem description (need, who, what the workflow produces)
-- [ ] Definition of success (checkable)
-- [ ] Architecture (context the agent gets, stages/subagents, which parts run unattended)
-- [ ] Schedule (milestones working backwards from the demo, weeks 46-47)
-- [ ] Risk assessment (what fails + what we do)
-- [ ] Repository link
-- [ ] Appendix: prompt logs (max 2 pages)
-- [ ] Appendix: meeting reports
+- [x] Problem description (need, who, what the workflow produces)
+- [x] Definition of success (checkable)
+- [x] Architecture (context the agent gets, stages/subagents, which parts run unattended)
+- [x] Schedule (milestones working backwards from the demo, weeks 46-47)
+- [x] Risk assessment (what fails + what we do)
+- [x] Repository link
+- [x] Appendix: prompt logs (max 2 pages)
+- [ ] Appendix: meeting reports (placeholder until the team meeting is written up from the recording)
 ### Walking skeleton
 - [x] One path runs end to end: real input -> harness -> checkable output (live NVE run verified 2026-10-28)
 - [x] README that lets anyone reproduce the run
 - [x] Context files the harness uses are in the repo (`context/`)
-- [ ] Push to a PUBLIC git repo and put the URL in the report (no git repo yet)
+- [x] Public repo: https://github.com/Chrislysen/innlandet-hazard-digest
 ### Technical minimum (all four)
 - [x] Input -> output whose correctness can be checked (validate.py)
 - [x] More than one stage
@@ -46,11 +46,11 @@ If stage 2 finds nothing to warn about, stage 3 is skipped (deterministic all-cl
 ## Built in from day 1 for the exam (PDF section 3)
 - Safe operation: tool-less agent, budget cap, secrets only via env, kill switch (`KILL` file + failure streak), human gate.
 - Stress tests (pick 2): **input perturbation** (prompt injection in warning text) + **dependency failure** (API outage / bad data).
-- Honest failure log: `logs/failures.md` — record every real failure and repair as we go (target >=3 failures, >=2 repairs).
+- Honest failure log: `logs/failures.md` (F1-F10 so far, all repaired) and `logs/successes.md`; target for the exam is >=3 real failures and >=2 repairs, we already have more.
 - Meeting reports: `logs/meetings/` — need >=8 by the exam. Prompt logs: `logs/prompts.md`.
 
 ## Schedule (working backwards)
-- Compulsory 2 deadline: **CONFIRM ON CANVAS** (not in the PDF)
+- Compulsory 2 deadline: 30 Oct 2026 12:00 (a Friday; **confirm on Canvas**, not in the PDF)
 - Weeks 46-47 (9-22 Nov 2026): live demo — rehearse one week before
 - 3 Dec 2026 11:59: white paper via Wiseflow, repo tagged `exam`
 - After C2: eval harness + test set -> stress tests + repairs -> safe-operation evidence -> white paper
