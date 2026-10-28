@@ -40,7 +40,7 @@ If stage 2 finds nothing to warn about, stage 3 is skipped (deterministic all-cl
 
 ## Constraints checklist (PDF section 1)
 - [x] No personal data (only public hazard warnings + municipality names)
-- [x] Official API, no scraping, no republishing of source material beyond short attributed quotes
+- [x] Official API, no scraping; complete official warning text is reproduced unaltered with attribution, as NVE requests, and nothing beyond the warning fields is fetched
 - [x] Fits Innlandet (Norwegian source language, Innlandet municipalities, NO+EN output)
 
 ## Built in from day 1 for the exam (PDF section 3)
