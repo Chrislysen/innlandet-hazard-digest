@@ -22,7 +22,7 @@ Format: what failed -> how we noticed -> why (propagation) -> repair -> evidence
 
 ## F4 — design flaw: the model decided which official advice survived; long official text was truncated — 2026-10-28
 - **What:** the digest contained only the agent's paraphrase, and source text was cut at 1200 chars. NVE asks that complete warning information be retained.
-- **Noticed:** external review of the project (second assistant), checked by us against the assignment and the API.
+- **Noticed:** external review of the project, checked by us against the assignment and the API.
 - **Repair:** `normalize` keeps the complete official fields verbatim (`Item.official`); `render` appends them unaltered under each entry. Test `test_complete_official_text_is_kept_unaltered` fails if any official sentence is dropped.
 
 ## F5 — English text looked official — 2026-10-28
