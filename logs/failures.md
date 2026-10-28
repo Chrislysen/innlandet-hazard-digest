@@ -54,6 +54,14 @@ Format: what failed -> how we noticed -> why (propagation) -> repair -> evidence
 - **What:** only `system_prompt.md` was loaded; glossary and style guide were unused; complete official text entered the prompt despite the stated 1200-character cap.
 - **Repair:** `load_context()` concatenates all three files; the model gets `Item.to_model_dict()` (capped texts only), the complete text stays outside the prompt. Tests: `test_all_context_files_are_loaded`, `test_model_input_excludes_complete_official_text`.
 
+## F11 — fifth external review: five gaps, all reproduced and repaired — 2026-10-28
+- **Malformed levels:** `int()` turned `True` and `1.9` into level 1 (green), so a malformed feed passed coverage as an all-clear. **Repair:** `normalize.parse_level` accepts only an int or a digit string; anything else is invalid and fails the data-quality guard.
+- **Invented continuous period:** the template used the first and last warning date as one interval, so orange on 28 and 30 Oct with green on 29 Oct became "from 2026-10-28 to 2026-10-30", and the validator accepted it. **Repair:** the template lists consecutive runs separately (`draft.date_runs`, also used by the all-clear text); the validator rejects any stated period (ISO, "28.–30. oktober", "October 28-30", "from 28 October to 30 October") that includes a day without a warning, which also covers the agent backend.
+- **Approval trusted the files:** `approve` published the current `digest.md` even if it was edited after validation. **Repair:** the run records SHA-256 of `digest.md` and `digest.html`; `approve` refuses if either changed.
+- **Demo overstated its checks:** the demo showed "No warnings" and "validation OK" for an empty feed that the pipeline rejects. **Repair:** the demo applies the same data-quality guard and states the covered days.
+- **Validator crash:** a list-valued `id` raised `TypeError` instead of returning problems, bypassing retry/fallback. **Repair:** type checks on id, municipality_id, hazard (strings) and max_level (integer, not boolean).
+- **Proof:** `FifthReviewTests` (10 tests). Run against the previous source, 8 of them fail; the other 2 confirm that the normal path (approving an unchanged digest, a genuinely consecutive period) still passes.
+
 ## Candidates still to induce for the exam (section 3.3)
 - Input perturbation: `data/fixtures/synthetic_injection` (done for template + claude, one pass). Needs a proper eval harness + more variants.
 - Dependency failure: API outage / malformed payload / silent all-green degradation.

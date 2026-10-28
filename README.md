@@ -53,7 +53,7 @@ Data: "Varsler fra Flomvarslingen i Norge og www.varsom.no" / "Varsler fra Jords
 - **Permission scoping:** agent runs with `--tools "" --strict-mcp-config --setting-sources ""` (no tools/MCP/skills); only the harness touches files and network.
 - **Secrets:** none in repo; the CLI uses the user's own login/env. `.env` is git-ignored.
 - **Cost control:** one USD 0.25 limit per run: each attempt is passed only the remainder as the CLI's own budget limit (max 2 attempts). `log.json` records `cost_measured_usd` (reported by the CLI) separately from `cost_assumed_usd` (the granted remainder is assumed spent if a call fails without a report).
-- **Human gate:** nothing is published until `approve`; `approve` refuses runs that failed validation.
+- **Human gate:** nothing is published until `approve`; `approve` refuses runs that failed validation and digests changed after validation (SHA-256 recorded in `log.json`).
 - **Kill switch:** `KILL` file halts all runs; auto-engaged after 3 consecutive failed runs (`python -m hazard status`).
 
 ## Layout

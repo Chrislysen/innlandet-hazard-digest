@@ -7,6 +7,17 @@ from . import config
 _CTRL = re.compile(r"[\x00-\x08\x0b-\x1f\x7f]")
 
 
+def parse_level(v) -> int:
+    """Strict: an int or a digit string. Booleans, floats such as 1.9 and anything else are invalid (0)."""
+    if isinstance(v, bool):
+        return 0
+    if isinstance(v, int):
+        return v
+    if isinstance(v, str) and re.fullmatch(r"\d", v.strip()):
+        return int(v)
+    return 0
+
+
 def clean_text(s: str | None, cap: bool = True) -> str:
     """Untrusted source text: strip control chars, collapse whitespace, optionally cap length."""
     if not s:
@@ -59,10 +70,7 @@ def normalize(raw: dict[str, dict]) -> tuple[list[Item], dict]:
                 covered = stats["coverage"][hazard].setdefault(str(m["Id"]), set())
                 for w in m.get("WarningList") or []:
                     stats["warnings_seen"] += 1
-                    try:
-                        level = int(w.get("ActivityLevel"))
-                    except (TypeError, ValueError):
-                        level = 0
+                    level = parse_level(w.get("ActivityLevel"))
                     if not 1 <= level <= 4:  # missing, unassessed (0) or malformed: never guess, never count as green
                         stats["invalid_levels"] += 1
                         continue

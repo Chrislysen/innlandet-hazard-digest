@@ -42,16 +42,26 @@ def _official(it):
     return f"<details><summary>Complete official NVE text (unaltered, Norwegian)</summary>{rows}</details>"
 
 
-def _scenario(name, title, note, backend):
-    raw = fetch.load_dir(config.ROOT / "data" / "fixtures" / name)
+def _scenario(name, title, note, backend, source_dir=None):
+    source_dir = source_dir or config.ROOT / "data" / "fixtures" / name
+    raw = fetch.load_dir(source_dir)
     items, stats = normalize.normalize(raw)
-    label = pipeline.fixture_label(config.ROOT / "data" / "fixtures" / name)
+    label = pipeline.fixture_label(source_dir)
     out = [f"<h2>{html.escape(title)}</h2><p><b>{html.escape(label)}</b></p><p>{html.escape(note)}</p>",
            f"<p><small>Stage 1-2: {stats['municipalities_seen']} municipality records read, "
            f"{stats['dropped_green']} green warnings dropped, <b>{len(items)} item(s) kept</b>.</small></p>"]
+    try:
+        days = pipeline.check_data_quality(stats)
+    except pipeline.DataQualityError as e:
+        out.append(f'<p>Data-quality guard: <span class="bad">REJECTED</span>, no digest produced. {html.escape(str(e))}</p>')
+        return "".join(out)
+    span = html.escape(pipeline._span(days))
+    out.append(f"<p><small>Data-quality guard: every expected municipality has an assessed level for {span}, "
+               f"both hazards.</small></p>")
     if not items:
-        out.append('<div class="card"><p>Ingen varsler på gult nivå eller høyere.</p><p class="en">No warnings at yellow level or above.</p></div>')
-        out.append('<p>Stage 4 validation: <span class="ok">OK</span> (LLM skipped, cost $0)</p>')
+        out.append(f'<div class="card"><p>Ingen varsler på gult nivå eller høyere for {span}.</p>'
+                   f'<p class="en">No warnings at yellow level or above for {span}.</p></div>')
+        out.append('<p>Stage 3-4: nothing to draft or validate (LLM skipped, cost $0).</p>')
         return "".join(out)
     d = draft_mod.BACKENDS[backend](items)
     res = validate.validate(items, d)

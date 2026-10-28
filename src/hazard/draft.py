@@ -5,6 +5,7 @@ claude   : headless Claude Code CLI, NO tools, hard budget cap, structured JSON 
 """
 import json
 import subprocess
+from datetime import date
 
 from . import config
 from .normalize import Item
@@ -54,9 +55,26 @@ def verify_lockdown() -> dict:
     raise RuntimeError("no init event from claude CLI")
 
 
-def _period(it: Item) -> tuple[str, str]:
-    a, b = it.days[0]["date"], it.days[-1]["date"]
-    return a, b
+def date_runs(days) -> list[tuple[str, str]]:
+    """Consecutive ISO dates grouped into (first, last) runs. A gap is never bridged."""
+    runs = []
+    for d in sorted(set(days)):
+        if runs and (date.fromisoformat(d) - date.fromisoformat(runs[-1][1])).days == 1:
+            runs[-1] = (runs[-1][0], d)
+        else:
+            runs.append((d, d))
+    return runs
+
+
+def _join(parts: list[str], word: str) -> str:
+    return parts[0] if len(parts) == 1 else ", ".join(parts[:-1]) + f" {word} " + parts[-1]
+
+
+def _periods(it: Item) -> tuple[str, str]:
+    runs = date_runs(d["date"] for d in it.days)
+    nb = _join([f"den {a}" if a == b else f"fra {a} til {b}" for a, b in runs], "og")
+    en = _join([f"on {a}" if a == b else f"from {a} to {b}" for a, b in runs], "and")
+    return nb, en
 
 
 def draft_template(items: list[Item], feedback: str | None = None, budget: float | None = None) -> dict:
@@ -64,9 +82,7 @@ def draft_template(items: list[Item], feedback: str | None = None, budget: float
     for it in items:
         nb_c, en_c = config.LEVEL_COLORS[it.max_level]
         nb_h, en_h = config.HAZARD_NAMES[it.hazard]
-        a, b = _period(it)
-        span_nb = f"den {a}" if a == b else f"fra {a} til {b}"
-        span_en = f"on {a}" if a == b else f"from {a} to {b}"
+        span_nb, span_en = _periods(it)
         entries.append({
             "id": it.id, "municipality_id": it.municipality_id, "hazard": it.hazard, "max_level": it.max_level,
             "text_nb": f"{it.municipality_name}: {nb_c} varsel om {nb_h} {span_nb} (NVE/Varsom).",

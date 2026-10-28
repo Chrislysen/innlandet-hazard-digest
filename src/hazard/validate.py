@@ -7,6 +7,7 @@ still reviews the summary before publication.
 """
 import re
 from dataclasses import dataclass, field
+from datetime import date, timedelta
 
 from . import config
 from .normalize import Item
@@ -31,6 +32,9 @@ _MONTH_RE = "|".join(sorted(_MONTHS, key=len, reverse=True))
 _DAY_MONTH = re.compile(rf"\b(\d{{1,2}})\.?\s+(?:av\s+)?({_MONTH_RE})\b", re.I)
 _MONTH_DAY = re.compile(rf"\b({_MONTH_RE})\s+(\d{{1,2}})\b", re.I)
 _ISO = re.compile(r"\b\d{4}-\d{2}-\d{2}\b")
+_SEP = r"\s*(?:–|—|-|til|to|through|until)\s*(?:den\s+)?"
+_BARE_RANGE_NB = re.compile(rf"\b(\d{{1,2}})\.?{_SEP}(\d{{1,2}})\.?\s+(?:av\s+)?({_MONTH_RE})\b", re.I)
+_BARE_RANGE_EN = re.compile(rf"\b({_MONTH_RE})\s+(\d{{1,2}}){_SEP}(\d{{1,2}})\b", re.I)
 _REQUIRED = ("id", "municipality_id", "hazard", "max_level", "text_nb", "text_en")
 
 
@@ -101,6 +105,46 @@ def _date_problems(t: str, iso: set[str], md: set[tuple[int, int]]) -> list[str]
     return bad
 
 
+def _mentions(t: str) -> list[tuple[int, int, tuple[int, int]]]:
+    """Every date mention as (start, end, (month, day))."""
+    out = [(m.start(), m.end(), (int(m.group()[5:7]), int(m.group()[8:10]))) for m in _ISO.finditer(t)]
+    out += [(m.start(), m.end(), (_MONTHS[m.group(2).lower()], int(m.group(1)))) for m in _DAY_MONTH.finditer(t)]
+    out += [(m.start(), m.end(), (_MONTHS[m.group(1).lower()], int(m.group(2)))) for m in _MONTH_DAY.finditer(t)]
+    return sorted(out)
+
+
+def _between(a: tuple[int, int], b: tuple[int, int]) -> list[tuple[int, int]]:
+    start = date(2000, *a)
+    end = date(2000 if b >= a else 2001, *b)
+    if (end - start).days > 31:
+        return [a, b, (0, 0)]  # implausible span: report it
+    return [((start + timedelta(n)).month, (start + timedelta(n)).day) for n in range((end - start).days + 1)]
+
+
+def _range_problems(t: str, warned: set[tuple[int, int]]) -> list[str]:
+    """'from 28 to 30 October' claims every day in between; each of them must carry a warning in the source."""
+    spans = []
+    ms = _mentions(t)
+    for (s1, e1, a), (s2, e2, b) in zip(ms, ms[1:]):
+        if re.fullmatch(_SEP, t[e1:s2], re.I):
+            spans.append((t[s1:e2], a, b))
+    for m in _BARE_RANGE_NB.finditer(t):
+        mo = _MONTHS[m.group(3).lower()]
+        spans.append((m.group(0), (mo, int(m.group(1))), (mo, int(m.group(2)))))
+    for m in _BARE_RANGE_EN.finditer(t):
+        mo = _MONTHS[m.group(1).lower()]
+        spans.append((m.group(0), (mo, int(m.group(2))), (mo, int(m.group(3)))))
+    bad = []
+    for text, a, b in spans:
+        try:
+            days = _between(a, b)
+        except ValueError:
+            days = [(0, 0)]
+        if any(d not in warned for d in days):
+            bad.append(text)
+    return bad
+
+
 def validate(items: list[Item], draft: dict) -> Result:
     r = Result()
     entries = draft.get("entries")
@@ -112,6 +156,10 @@ def validate(items: list[Item], draft: dict) -> Result:
     for n, e in enumerate(entries):
         if not isinstance(e, dict) or any(k not in e for k in _REQUIRED):
             r.problems.append(f"entry #{n}: missing required fields {_REQUIRED}")
+            continue
+        if not all(isinstance(e[k], str) for k in ("id", "municipality_id", "hazard")) \
+                or isinstance(e["max_level"], bool) or not isinstance(e["max_level"], int):
+            r.problems.append(f"entry #{n}: id, municipality_id and hazard must be strings, max_level an integer")
             continue
         eid = e["id"]
         if eid in seen:
@@ -154,6 +202,9 @@ def validate(items: list[Item], draft: dict) -> Result:
                 r.problems.append(f"{eid}.{key}: numbers not in source: {sorted(extra)}")
             for bd in _date_problems(t, iso, md):
                 r.problems.append(f"{eid}.{key}: date not valid for this warning: {bd!r}")
+            warned = {(int(d["date"][5:7]), int(d["date"][8:10])) for d in it.days}
+            for span in _range_problems(t, warned):
+                r.problems.append(f"{eid}.{key}: period includes days without a warning: {span!r}")
             for m in foreign_links(t):
                 r.problems.append(f"{eid}.{key}: link/address not allowed: {m!r}")
             for m in _RISKY.finditer(t):

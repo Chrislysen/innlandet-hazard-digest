@@ -1,4 +1,5 @@
 """Orchestrates the stages, enforces the kill switch, writes an auditable run directory."""
+import hashlib
 import html
 import json
 from datetime import date, datetime, timedelta
@@ -104,18 +105,7 @@ def _is_replay(items, today: date) -> bool:
 
 def _span(days):
     """'2026-10-28 – 2026-10-30' only for consecutive days; gaps are listed separately, never bridged."""
-    runs, start, prev = [], None, None
-    for d in days:
-        cur = date.fromisoformat(d)
-        if prev is not None and (cur - prev).days == 1:
-            prev = cur
-            last = d
-            continue
-        if start is not None:
-            runs.append((start, last))
-        start, prev, last = d, cur, d
-    runs.append((start, last))
-    return ", ".join(a if a == b else f"{a} – {b}" for a, b in runs)
+    return ", ".join(a if a == b else f"{a} – {b}" for a, b in draft_mod.date_runs(days))
 
 
 def render(items, draft: dict, today: date, label: str | None = None, flags: dict | None = None,
@@ -262,6 +252,7 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
             raise RuntimeError("final output failed the output gate: " + "; ".join(final_problems[:3]))
         (run_dir / "digest.md").write_text(md, "utf-8")
         (run_dir / "digest.html").write_text(page, "utf-8")
+        log["digest_sha256"] = {n: _sha256(run_dir / n) for n in ("digest.md", "digest.html")}
         log.update(ok=result.ok, validated_entries=result.checked, status="pending_approval")
         _set_streak(0)
         return run_dir
@@ -276,12 +267,20 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
         (run_dir / "log.json").write_text(json.dumps(log, ensure_ascii=False, indent=1), "utf-8")
 
 
+def _sha256(path: Path) -> str:
+    return hashlib.sha256(path.read_bytes()).hexdigest()
+
+
 def approve(run_dir: Path, allow_flagged: bool = False) -> Path:
     log = json.loads((run_dir / "log.json").read_text("utf-8"))
     if not log.get("ok") or log.get("status") != "pending_approval":
         raise Halted("run is not approvable (failed validation or already handled)")
     if log.get("flags") and not allow_flagged:
         raise Halted(f"run has flagged official text for {sorted(log['flags'])}; read the source, then use --allow-flagged")
+    recorded = log.get("digest_sha256") or {}
+    for name in ("digest.md", "digest.html"):
+        if recorded.get(name) != _sha256(run_dir / name):
+            raise Halted(f"{name} differs from the version that passed validation; re-run the pipeline instead of editing")
     pub = config.OUT_DIR / "published"
     pub.mkdir(parents=True, exist_ok=True)
     target = pub / f"{run_dir.name}.md"

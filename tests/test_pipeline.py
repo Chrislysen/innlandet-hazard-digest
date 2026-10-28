@@ -12,7 +12,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from datetime import date
 
-from hazard import config, draft, fetch, normalize, pipeline, validate  # noqa: E402
+from hazard import config, demo, draft, fetch, normalize, pipeline, validate  # noqa: E402
 
 FIX = ROOT / "data" / "fixtures"
 
@@ -361,6 +361,107 @@ class FinalOutputTests(unittest.TestCase):
 
     def test_output_gate_catches_a_foreign_link(self):
         self.assertTrue(validate.check_rendered("see www.evil-example.com"))
+
+
+class FifthReviewTests(unittest.TestCase):
+    """Regression cases from the fifth external review."""
+
+    def innlandet_warnings(self, raw):
+        for h in config.HAZARDS:
+            for c in raw[h]["CountyList"]:
+                if c["Id"] == "34":
+                    for m in c["MunicipalityList"]:
+                        yield from m["WarningList"]
+
+    def test_malformed_levels_are_invalid_not_green(self):
+        for bad in (True, 1.9, "1.9", "", None, "x"):
+            self.assertEqual(normalize.parse_level(bad), 0, repr(bad))
+        self.assertEqual(normalize.parse_level("2"), 2)
+        self.assertEqual(normalize.parse_level(3), 3)
+
+    def test_feed_with_boolean_or_fractional_levels_is_rejected(self):
+        for bad in (True, 1.9):
+            raw = fetch.load_dir(FIX / "real_green")
+            for w in self.innlandet_warnings(raw):
+                w["ActivityLevel"] = bad
+            items, stats = normalize.normalize(raw)
+            self.assertEqual(items, [])
+            self.assertGreater(stats["invalid_levels"], 0)
+            with self.assertRaises(pipeline.DataQualityError):
+                pipeline.check_data_quality(stats)
+
+    def gap_item(self):
+        return normalize.Item("3403-flood", "3403", "Hamar", "flood", 3,
+                              [{"date": "2026-10-28", "level": 3}, {"date": "2026-10-30", "level": 3}])
+
+    def test_template_does_not_bridge_a_green_day(self):
+        e = draft.draft_template([self.gap_item()])["entries"][0]
+        self.assertIn("den 2026-10-28 og den 2026-10-30", e["text_nb"])
+        self.assertIn("on 2026-10-28 and on 2026-10-30", e["text_en"])
+        self.assertNotIn("til 2026-10-30", e["text_nb"])
+        self.assertTrue(validate.validate([self.gap_item()], draft.draft_template([self.gap_item()])).ok)
+
+    def test_validator_rejects_a_bridged_period(self):
+        it = self.gap_item()
+        for nb, en in (("Hamar: oransje flom fra 2026-10-28 til 2026-10-30.", "Hamar: orange flood warning, 28 October."),
+                       ("Hamar: oransje farenivå for flom 28.–30. oktober.", "Hamar: orange flood warning, 28 October."),
+                       ("Hamar: oransje farenivå for flom 28. oktober.", "Hamar: orange flood warning October 28-30.")):
+            d = draft.draft_template([it])
+            d["entries"][0].update(text_nb=nb, text_en=en)
+            res = validate.validate([it], d)
+            self.assertTrue(any("period includes days without a warning" in p for p in res.problems), (nb, en, res.problems))
+
+    def test_validator_accepts_a_true_consecutive_period(self):
+        it = normalize.Item("3403-flood", "3403", "Hamar", "flood", 3,
+                            [{"date": f"2026-10-{d}", "level": 3} for d in (28, 29, 30)])
+        d = draft.draft_template([it])
+        d["entries"][0].update(text_nb="Hamar: oransje farenivå for flom 28.–30. oktober.",
+                               text_en="Hamar: orange flood warning from 28 October to 30 October.")
+        self.assertTrue(validate.validate([it], d).ok, validate.validate([it], d).problems)
+
+    def test_validator_reports_wrong_types_instead_of_crashing(self):
+        it = self.gap_item()
+        for field_, value in (("id", ["3403-flood"]), ("municipality_id", 3403), ("max_level", True), ("max_level", "3")):
+            d = draft.draft_template([it])
+            d["entries"][0][field_] = value
+            res = validate.validate([it], d)
+            self.assertFalse(res.ok, field_)
+
+    def temp_run(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        old = (config.OUT_DIR, config.FAILURE_STREAK_FILE, config.KILL_FILE)
+        self.addCleanup(lambda: setattr(config, "OUT_DIR", old[0]) or setattr(config, "FAILURE_STREAK_FILE", old[1])
+                        or setattr(config, "KILL_FILE", old[2]))
+        config.OUT_DIR = Path(tmp.name) / "out"
+        config.FAILURE_STREAK_FILE = config.OUT_DIR / ".streak"
+        config.KILL_FILE = Path(tmp.name) / "KILL"
+        return pipeline.run("template", FIX / "synthetic_orange")
+
+    def test_approve_publishes_the_validated_digest(self):
+        run_dir = self.temp_run()
+        target = pipeline.approve(run_dir)
+        self.assertIn("APPROVED BY HUMAN", target.read_text(encoding="utf-8"))
+
+    def test_approve_refuses_a_digest_edited_after_validation(self):
+        run_dir = self.temp_run()
+        with open(run_dir / "digest.md", "a", encoding="utf-8") as f:
+            f.write("\nMore at https://evil-example.com\n")
+        with self.assertRaisesRegex(pipeline.Halted, "differs from the version that passed validation"):
+            pipeline.approve(run_dir)
+        self.assertFalse((config.OUT_DIR / "published").exists())
+
+    def test_demo_applies_the_data_quality_guard(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            for h in config.HAZARDS:
+                (Path(tmp) / f"{h}.json").write_text(json.dumps({"CountyList": []}), encoding="utf-8")
+            page = demo._scenario("empty", "Empty feed", "All county lists empty.", "template", Path(tmp))
+        self.assertIn("REJECTED", page)
+        self.assertNotIn("No warnings", page)
+
+    def test_demo_all_clear_names_the_covered_days(self):
+        page = demo._scenario("real_green", "Real", "", "template")
+        self.assertIn("No warnings at yellow level or above for 2026-10-28 – 2026-10-30", page)
 
 
 class RunBudgetAndContextTests(unittest.TestCase):
