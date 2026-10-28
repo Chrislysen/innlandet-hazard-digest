@@ -13,3 +13,8 @@ Key design: data inside `<items>` is untrusted; agent may only use facts from th
 ## P3 — correction of agent output (human-in-the-loop evidence)
 - Agent first claimed `--tools ""` made the drafting stage tool-less. Debugging showed MCP tools were still exposed -> we added strict flags and verified (see failures.md F1).
 - Agent-written test expected 46 municipalities; stat counted both hazards (92). Test corrected.
+
+## P4 — second-opinion review (human-in-the-loop evidence)
+A research handoff from another assistant was reviewed. We did not take it on trust: its archived warning was re-fetched from the live API and matched byte for byte.
+Adopted: keep complete official text, label English as unofficial, use the real historical warning for replay, soften the unproven "municipal sites have no APIs" claim.
+Rejected: shrinking scope to one municipality (the county pipeline already ran and was tested).

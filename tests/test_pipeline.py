@@ -8,6 +8,8 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
+from datetime import date
+
 from hazard import draft, fetch, normalize, pipeline, validate  # noqa: E402
 
 FIX = ROOT / "data" / "fixtures"
@@ -101,6 +103,32 @@ class ValidateTests(unittest.TestCase):
     def test_wrong_municipality_name(self):
         r = self._mutate(lambda e: e[0].update(text_nb="Oslo: oransje varsel om flom (NVE/Varsom) i dag."))
         self.assertTrue(any("does not name municipality" in p for p in r.problems))
+
+
+class HistoricalReplayTests(unittest.TestCase):
+    """Real archived NVE warning (Hamar, orange flood, 2023-08-10) from data/evidence."""
+
+    def setUp(self):
+        self.items, _ = items_for("historical_hamar_2023")
+
+    def test_real_warning_is_found(self):
+        self.assertEqual([(i.id, i.max_level) for i in self.items], [("3403-flood", 3)])
+
+    def test_template_validates_on_real_text(self):
+        self.assertTrue(validate.validate(self.items, draft.draft_template(self.items)).ok)
+
+    def test_complete_official_text_is_kept_unaltered(self):
+        raw = fetch.load_dir(FIX / "historical_hamar_2023")
+        src = [w for c in raw["flood"]["CountyList"] if c["Id"] == "34" for m in c["MunicipalityList"]
+               for w in (m["WarningList"] or []) if m["Id"] == "3403"][0]
+        md = pipeline.render(self.items, draft.draft_template(self.items), date(2026, 10, 28))
+        for key in ("WarningText", "AdviceText", "ConsequenceText", "LevelMeaningText"):
+            self.assertIn(" ".join(src[key].split()), md)  # nothing dropped or paraphrased
+
+    def test_marked_as_archived_replay(self):
+        md = pipeline.render(self.items, draft.draft_template(self.items), date(2026, 10, 28))
+        self.assertIn("ARCHIVED REPLAY", md)
+        self.assertIn("Unofficial English summary", md)
 
 
 class InjectionFixtureTests(unittest.TestCase):

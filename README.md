@@ -40,6 +40,11 @@ Each run writes `out/run_*/{items.json, digest.md, digest.html, log.json}` (open
 Today's real data may be all-green (a valid "all clear" run); `data/fixtures/synthetic_*` contain **synthetic** warnings
 injected by `scripts/make_fixtures.py` for testing — they are not real warnings.
 
+## Official content and attribution
+The agent writes only a short summary. The complete official Norwegian warning text is appended unaltered to every entry; English is an unofficial summary and labelled so (NVE's own English can differ). Timestamps are kept as published.
+`data/fixtures/historical_hamar_2023` replays a **real archived** warning (Hamar, orange flood, 2023-08-10; evidence and hashes in `data/evidence/`); output is marked "ARCHIVED REPLAY".
+Data: "Varsler fra Flomvarslingen i Norge og www.varsom.no" / "Varsler fra Jordskredvarslingen i Norge og www.varsom.no". No NVE endorsement is implied.
+
 ## Context files used by the agent
 `context/system_prompt.md` (rules, untrusted-data handling, output contract), `context/style_guide.md`, `context/glossary.md`.
 

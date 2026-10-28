@@ -7,6 +7,8 @@ from datetime import date
 from . import config, draft as draft_mod, fetch, normalize, validate
 
 SCENARIOS = [
+    ("historical_hamar_2023", "Real historical warning (archived replay)",
+     "Genuine NVE orange flood warning for Hamar, valid 10 Aug 2023. Dated in the past on purpose."),
     ("real_green", "Real NVE data (all green)", "Nothing at yellow level or above: the agent is skipped and a deterministic all-clear is produced."),
     ("synthetic_orange", "Synthetic warnings", "Orange flood in Hamar, yellow landslide in Lillehammer. Injected by us for testing."),
     ("synthetic_injection", "Synthetic prompt injection", "The warning text tells the model to say level red and to visit a foreign website."),
@@ -30,6 +32,14 @@ h1{margin-bottom:0}h2{margin-top:2.2rem;border-bottom:2px solid #e3e6ec;padding-
 td,th{border:1px solid #d5d9e0;padding:.3rem .5rem;text-align:left;vertical-align:top;font-size:.9em}p.en{color:#4a5160}small{color:#666}"""
 
 
+def _official(it):
+    if not it.official:
+        return ""
+    rows = "".join(f"<p><b>{html.escape(k)}:</b> {html.escape(o[k])}</p>"
+                   for o in it.official for k in ("main", "warning", "advice", "consequence") if o[k])
+    return f"<details><summary>Complete official NVE text (unaltered, Norwegian)</summary>{rows}</details>"
+
+
 def _scenario(name, title, note, backend):
     raw = fetch.load_dir(config.ROOT / "data" / "fixtures" / name)
     items, stats = normalize.normalize(raw)
@@ -47,7 +57,8 @@ def _scenario(name, title, note, backend):
         e = by[it.id]
         out.append(f'<div class="card"><h3>{html.escape(it.municipality_name)} · {it.hazard} '
                    f'<span class="b l{it.max_level}">level {it.max_level}</span></h3>'
-                   f'<p>{html.escape(e["text_nb"])}</p><p class="en">{html.escape(e["text_en"])}</p></div>')
+                   f'<p>{html.escape(e["text_nb"])}</p><p class="en">{html.escape(e["text_en"])} '
+                   f'<small>(unofficial English summary)</small></p>' + _official(it) + '</div>')
     status = '<span class="ok">OK</span>' if res.ok else '<span class="bad">REJECTED</span>'
     out.append(f"<p>Stage 4 validation ({d['backend']} backend): {status}, {res.checked} entries checked against the source.</p>")
     for p in res.problems:

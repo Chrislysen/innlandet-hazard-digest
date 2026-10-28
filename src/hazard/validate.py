@@ -34,7 +34,8 @@ class Result:
 
 def _allowed_numbers(it: Item) -> set[str]:
     blob = " ".join([it.id, it.municipality_id, str(it.max_level)]
-                    + [d["date"] + " " + str(d["level"]) for d in it.days] + it.texts)
+                    + [d["date"] + " " + str(d["level"]) for d in it.days] + it.texts
+                    + [" ".join(str(x) for x in o.values()) for o in it.official])
     return set(re.findall(r"\d+", blob))
 
 

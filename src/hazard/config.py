@@ -22,6 +22,10 @@ LEVEL_COLORS = {2: ("gult", "yellow"), 3: ("oransje", "orange"), 4: ("rødt", "r
 HAZARD_NAMES = {"flood": ("flom", "flood"), "landslide": ("jordskred", "landslide")}
 SOURCE_URL = "https://www.varsom.no/flom-og-jordskred/"
 URL_ALLOWLIST = ("varsom.no",)
+ATTRIBUTION = {
+    "flood": "Varsler fra Flomvarslingen i Norge og www.varsom.no",
+    "landslide": "Varsler fra Jordskredvarslingen i Norge og www.varsom.no",
+}
 
 # Safe operation
 MAX_BUDGET_USD = 0.25          # hard cap per run, enforced by the claude CLI

@@ -20,6 +20,15 @@ Format: what failed -> how we noticed -> why (propagation) -> repair -> evidence
 - **Repair:** all fetching via Python `urllib` + explicit UTF-8; fixtures regenerated.
 - **Status:** repaired.
 
+## F4 — design flaw: the model decided which official advice survived; long official text was truncated — 2026-10-28
+- **What:** the digest contained only the agent's paraphrase, and source text was cut at 1200 chars. NVE asks that complete warning information be retained.
+- **Noticed:** external review of the project (second assistant), checked by us against the assignment and the API.
+- **Repair:** `normalize` keeps the complete official fields verbatim (`Item.official`); `render` appends them unaltered under each entry. Test `test_complete_official_text_is_kept_unaltered` fails if any official sentence is dropped.
+
+## F5 — English text looked official — 2026-10-28
+- **What:** the English was agent-written but unlabelled. On a real warning the official NO and EN versions differ materially, so English cannot be treated as a translation of the official text.
+- **Repair:** every English summary is labelled "Unofficial English summary; NVE's own English text can differ."
+
 ## Candidates still to induce for the exam (section 3.3)
 - Input perturbation: `data/fixtures/synthetic_injection` (done for template + claude, one pass). Needs a proper eval harness + more variants.
 - Dependency failure: API outage / malformed payload / silent all-green degradation.

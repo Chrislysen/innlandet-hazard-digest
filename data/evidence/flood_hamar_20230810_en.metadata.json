@@ -1,0 +1,20 @@
+{
+  "url": "https://api01.nve.no/hydrology/forecast/flood/v1.0.10/api/Warning/Municipality/3403/2/2023-08-10/2023-08-10",
+  "retrieved_at": "2026-10-28T11:32:48.867995+00:00",
+  "status": 200,
+  "sha256": "0847fd7c03ae1609ad36cf99186fab504457d64e62f24f9b1059418ffc0bcd5b",
+  "headers": {
+    "cache-control": "no-cache",
+    "pragma": "no-cache",
+    "content-type": "application/json; charset=utf-8",
+    "expires": "-1",
+    "server": "envoy",
+    "x-aspnet-version": "4.0.30319",
+    "x-powered-by": "ASP.NET",
+    "access-control-allow-origin": "*",
+    "date": "Wed, 28 Oct 2026 11:34:16 GMT",
+    "content-length": "2557",
+    "x-envoy-upstream-service-time": "377",
+    "connection": "close"
+  }
+}
