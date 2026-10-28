@@ -55,3 +55,9 @@ If stage 2 finds nothing to warn about, stage 3 is skipped (deterministic all-cl
 - Weeks 46-47 (9-22 Nov 2026): live demo — rehearse one week before
 - 3 Dec 2026 11:59: white paper via Wiseflow, repo tagged `exam`
 - After C2: eval harness + test set -> stress tests + repairs -> safe-operation evidence -> white paper
+
+## Exam: map view (verified data sources, 2026-10-28)
+- NVE flood zones: `https://kart.nve.no/enterprise/rest/services/Flomsoner2/MapServer` (no key, GeoJSON). Hamar mapped May 2025 (20/200/1000-year, with and without climate allowance; NVE report 2025/03). Also Stange, Ringsaker, Lillehammer, Gjøvik, Elverum, Kongsvinger. Not Otta.
+- Mjøsa water level: NVE HydAPI station 2.101.0 "Hamar (Mjøsa)", parameter 1000 (key in `.env`). 28 Oct 2026 16:00 UTC: 122.94 m; Aug 2023 daily peak 125.14 m (13 Aug). Height datum of HydAPI vs flood zones (NN2000) still to confirm.
+- Terrain: Terrarium elevation tiles (no key). Base map: Kartverket topo WMTS cache (no key).
+- Open: NVE's official mapping from warning level to return period is NOT yet confirmed; do not link warning colours to flood zones until it is.
