@@ -1,8 +1,7 @@
 # Prompt log (representative excerpts; keep raw, curate to max 2 pages for the C2 appendix)
 
 ## P1 — user -> coding agent (problem selection)
-> "you pick a problem that you think you could work with efficiently. And the way you know that there might be sources
-> and APIs that we could work on and make a workflow and make optimize."
+> "Could you conduct a broad search for publicly available data sources and APIs, compare their accessibility, clarity and usability, and recommend the most suitable option for an automated workflow addressing a recurring need in Innlandet?"
 **Agent action:** probed municipal sites (no feeds), then tested NVE Varsom / MET / Entur APIs live; recommended Varsom hazard digest.
 **Human judgement:** accepted the recommendation after seeing that municipal sources had no machine-readable access.
 
