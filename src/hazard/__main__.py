@@ -13,12 +13,21 @@ def main(argv=None) -> int:
     r.add_argument("--source-dir", type=Path, help="use saved raw payloads instead of the live API")
     a = sub.add_parser("approve", help="human gate: publish a validated run")
     a.add_argument("run_dir", type=Path)
+    dm = sub.add_parser("demo", help="build out/demo.html (all stages, all fixtures) and open it")
+    dm.add_argument("--backend", choices=["template", "claude"], default="template")
+    dm.add_argument("--no-open", action="store_true")
     sub.add_parser("status", help="show kill-switch state and failure streak")
     args = p.parse_args(argv)
     try:
         if args.cmd == "run":
             d = pipeline.run(args.backend, args.source_dir)
             print(f"OK  {d}\n    review {d / 'digest.md'} then: python -m hazard approve {d}")
+        elif args.cmd == "demo":
+            from . import demo
+            path = demo.build(args.backend)
+            print(f"BUILT {path}")
+            if not args.no_open:
+                demo.open_in_browser(path)
         elif args.cmd == "approve":
             print(f"PUBLISHED {pipeline.approve(args.run_dir)}")
         else:

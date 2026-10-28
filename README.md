@@ -13,6 +13,12 @@ If nothing is at yellow level or above, the LLM is skipped and a deterministic a
 - Python 3.11+ (standard library only)
 - Optional: [Claude Code CLI](https://claude.com/claude-code) logged in, for `--backend claude`
 
+## See it (browser)
+```powershell
+$env:PYTHONPATH = "src"; python -m hazard demo
+```
+Builds and opens `out/demo.html`: every stage on three scenarios, plus a panel where the validator catches six kinds of tampered drafts.
+
 ## Reproduce a run (PowerShell, from repo root)
 ```powershell
 $env:PYTHONPATH = "src"
