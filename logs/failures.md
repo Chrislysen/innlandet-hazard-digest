@@ -29,9 +29,12 @@ Format: what failed -> how we noticed -> why (propagation) -> repair -> evidence
 - **What:** the English was agent-written but unlabelled. On a real warning the official NO and EN versions differ materially, so English cannot be treated as a translation of the official text.
 - **Repair:** every English summary is labelled "Unofficial English summary; NVE's own English text can differ."
 
-## F6 — missing or unassessed data could become "no warnings" — 2026-10-28 (second external review)
-- **What:** the guard only counted municipality rows. Removed warning lists, level 0, invalid levels or stale data still gave a successful countywide all-clear.
-- **Repair:** coverage check (>= 40 municipalities per hazard with an assessed level 1-4) and, in live mode, a freshness check (a warning must cover today). Tests: `MissingDataIsNotAllClearTests`.
+## F6 — missing, unassessed or incomplete data could become "no warnings" — 2026-10-28 (second and third external review)
+- **What (round 1):** the guard only counted municipality rows. Removed warning lists, level 0, invalid levels or stale data still gave a countywide all-clear.
+- **First repair was only partial:** it required >= 40 municipalities per hazard with an assessed level and, live, that any warning covered today.
+- **What (round 3):** a third review reproduced that removing Hamar from both hazards, making Hamar's flood level 0, or removing the later forecast days everywhere still produced a successful "next three days" all-clear. Confirmed here: the previous commit (13607c5) accepted all three.
+- **Final repair:** reference list of the 46 expected municipality ids (`data/reference/`); for EVERY hazard each expected id needs an assessed level (1-4) for EVERY expected day (live: today and the next two; replay: the snapshot's baseline days). Otherwise the run fails with a message naming what is missing. The all-clear text states the dates it covers. The synthetic and historical fixtures were rebuilt so the non-warning days stay green.
+- **Proof:** `CoverageIsCompleteTests` (9 tests, incl. the three cases above in live and replay mode); the same three inputs are rejected now and were accepted before.
 
 ## F7 — validator gaps: look-alike links, invented dates, invented advice/reassurance — 2026-10-28
 - **What:** `https://varsom.no.evil-example.com` passed (substring match); an invalid date, evacuation advice and "the town is safe" passed. The claim "every fact is verified by code" was untrue.
@@ -44,7 +47,7 @@ Format: what failed -> how we noticed -> why (propagation) -> repair -> evidence
 
 ## F9 — the USD 0.25 budget applied per attempt, not per run — 2026-10-28
 - **What:** two attempts each got a fresh allowance (mocked 0.24 + 0.24 completed normally).
-- **Repair:** one shared run budget; each attempt gets only the remainder; no attempt starts below USD 0.02. Test: `test_budget_is_shared_across_attempts`.
+- **Repair:** one run limit; each attempt is passed only the remainder as the CLI's budget limit; no attempt starts below USD 0.02. `log.json` separates `cost_measured_usd` (reported by the CLI) from `cost_assumed_usd` (the granted remainder is treated as spent if a call fails without a report). Tests: `test_budget_is_shared_across_attempts`, `test_failed_call_counts_granted_budget_as_assumed_cost`.
 
 ## F10 — documented context did not match what ran — 2026-10-28
 - **What:** only `system_prompt.md` was loaded; glossary and style guide were unused; complete official text entered the prompt despite the stated 1200-character cap.

@@ -36,13 +36,9 @@ def set_warning(raw, hazard, muni_id, level, main, warning=None, advice=None, da
         for m in c["MunicipalityList"] or []:
             if m["Id"] != muni_id or c["Id"] != config.COUNTY_ID:
                 continue
-            base = copy.deepcopy(m["WarningList"][0])
-            m["WarningList"] = []
-            for d in days:
-                w = copy.deepcopy(base)
-                w.update(ActivityLevel=str(level), ValidFrom=d + "T00:00:00", ValidTo=d + "T23:59:59",
-                         MainText=main, WarningText=warning, AdviceText=advice)
-                m["WarningList"].append(w)
+            for w in m["WarningList"]:  # change only the requested days; the other days stay green
+                if (w["ValidFrom"] or "")[:10] in days:
+                    w.update(ActivityLevel=str(level), MainText=main, WarningText=warning, AdviceText=advice)
             return
     raise KeyError(muni_id)
 
@@ -57,8 +53,10 @@ def muni_id_by_name(raw, name):
 
 
 def main():
-    live = fetch.fetch_all(date.today(), save_dir=ROOT / "data" / "raw" / "fixture_capture")
-    dump("real_green", live)
+    if "--refresh-real" in sys.argv or not (FIX / "real_green").exists():
+        live = fetch.fetch_all(date.today(), save_dir=ROOT / "data" / "raw" / "fixture_capture")
+        dump("real_green", live)
+    live = fetch.load_dir(FIX / "real_green")  # synthetic scenarios are derived from the committed real snapshot
 
     s = copy.deepcopy(live)
     set_warning(s, "flood", muni_id_by_name(s, "Hamar"), 3, "Oransje nivå: betydelig fare for flom.",

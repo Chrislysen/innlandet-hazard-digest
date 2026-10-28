@@ -5,7 +5,7 @@
 - **Final-output gate paid for itself (F8):** it caught a real bug in our own link tokenizer (it swallowed `</p`) before it shipped.
 - **External evidence verified, not trusted:** the archived Hamar warning from the review pack was re-fetched from the live NVE API and was byte-identical (SHA-256 matched). Source: `data/evidence/`.
 - **Cost:** agent runs cost USD 0.01-0.03 each on the real historical warning and the injection fixture (`log.json` `total_cost_usd`).
-- **Reproducibility:** a fresh `git clone` passes 38 tests and runs the live, replay and demo paths with standard-library Python only.
+- **Reproducibility:** a fresh `git clone` passes 47 tests (48 with the opt-in live test) and runs the live, replay and demo paths with standard-library Python only.
 - **Reviews led to fixes, not defence:** two external reviews produced F4-F10; each was checked against the code, fixed, and covered by tests.
 
 ## Limits we still carry

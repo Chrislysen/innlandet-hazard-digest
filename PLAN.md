@@ -1,9 +1,10 @@
 # Battle plan — Innlandet Hazard Digest (KIUA-2003)
 
 **Problem:** Natural-hazard warnings (flood, landslide) for Innlandet are published as machine-readable
-data by NVE/Varsom but are not available in plain language, in English, or filtered to Innlandet's 46 municipalities.
-**Workflow:** fetch official warnings -> normalise -> agent drafts plain-language NO+EN digest -> code verifies every
-fact against the source -> human approves -> publish.
+data by NVE/Varsom, written for specialists. NVE also publishes English texts, but they can differ from the Norwegian ones. Nothing
+filters them to Innlandet in plain language per municipality.
+**Workflow:** fetch official warnings -> normalise -> agent drafts plain-language NO+EN summary -> code checks the structured facts, numbers, dates and links
+against the source (it cannot judge sentence meaning) -> human reads and approves -> publish.
 **Constraints met:** public data only (no personal data); official open API (no scraping); Innlandet municipalities only.
 
 ## Pipeline (stages)

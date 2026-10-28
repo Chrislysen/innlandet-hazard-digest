@@ -12,7 +12,7 @@ flood = json.loads((FIX / "real_green/flood.json").read_text(encoding="utf-8"))
 for county in flood["CountyList"]:
     for m in county["MunicipalityList"] or []:
         if county["Id"] == "34" and m["Id"] == "3403":
-            m["WarningList"] = [copy.deepcopy(warning)]
+            m["WarningList"] = m["WarningList"] + [copy.deepcopy(warning)]  # keep the green days, add the archived one
 
 out = FIX / "historical_hamar_2023"
 out.mkdir(parents=True, exist_ok=True)

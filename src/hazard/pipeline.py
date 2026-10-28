@@ -1,7 +1,7 @@
 """Orchestrates the stages, enforces the kill switch, writes an auditable run directory."""
 import html
 import json
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
 from pathlib import Path
 
 from . import config, fetch, normalize, draft as draft_mod, validate as validate_mod
@@ -24,19 +24,47 @@ class DataQualityError(RuntimeError):
     pass
 
 
-def check_data_quality(stats: dict, today: date | None = None):
-    """Missing, unassessed or stale warning data must never be reported as 'all clear'.
+def baseline_days(stats: dict, expected: dict) -> list[str]:
+    """Replay mode: days present for (nearly) every expected municipality and hazard. Days carried by only a few
+    records (e.g. one archived warning) are not part of the baseline."""
+    pairs = [(h, mid) for h, cov in stats["coverage"].items() for mid in expected if mid in cov]
+    count: dict[str, int] = {}
+    for h, mid in pairs:
+        for d in stats["coverage"][h][mid]:
+            count[d] = count.get(d, 0) + 1
+    need = 0.9 * len(expected) * len(stats["coverage"])
+    return sorted(d for d, n in count.items() if n >= need)
 
-    today=None is replay mode (archived/fixture data): coverage is still required, freshness is not.
+
+def check_data_quality(stats: dict, today: date | None = None) -> list[str]:
+    """Incomplete, unassessed or stale warning data must never be reported as 'all clear'.
+
+    Requires, for EVERY hazard, every expected Innlandet municipality id and an assessed warning level (1-4) for each
+    expected day. Live mode: today and the next DAYS_AHEAD days. Replay mode (today=None): the baseline days of the
+    snapshot. Returns the covered days so the digest can state exactly what it covers.
     """
-    need = config.MIN_MUNICIPALITIES_PER_HAZARD
-    for hazard, n in stats["valid_by_hazard"].items():
-        if n < need:
-            raise DataQualityError(
-                f"{hazard}: only {n} municipalities have an assessed warning level, expected >= {need} "
-                f"(missing, unassessed or invalid data is not 'all clear')")
-    if today is not None and today.isoformat() not in stats["valid_dates"]:
-        raise DataQualityError(f"no warning in the feed covers today ({today.isoformat()}); data is stale")
+    expected = config.expected_municipalities()
+    if today is not None:
+        days = [(today + timedelta(days=k)).isoformat() for k in range(config.DAYS_AHEAD + 1)]
+    else:
+        days = baseline_days(stats, expected)
+    problems = []
+    if not days:
+        problems.append("no forecast day is covered for all municipalities")
+    for hazard, cov in stats["coverage"].items():
+        missing = sorted(set(expected) - set(cov))
+        if missing:
+            names = ", ".join(f"{expected[m]} ({m})" for m in missing[:5])
+            problems.append(f"{hazard}: {len(missing)} expected municipalities missing from the feed: {names}")
+        gaps = {mid: [d for d in days if d not in cov[mid]] for mid in expected if mid in cov}
+        gaps = {mid: g for mid, g in gaps.items() if g}
+        if gaps:
+            first = next(iter(gaps))
+            problems.append(f"{hazard}: {len(gaps)} municipalities lack an assessed warning level for "
+                            f"{sorted({d for g in gaps.values() for d in g})} (e.g. {expected[first]})")
+    if problems:
+        raise DataQualityError("; ".join(problems) + " (incomplete data is not 'all clear')")
+    return days
 
 
 def _streak() -> int:
@@ -74,16 +102,22 @@ def _is_replay(items, today: date) -> bool:
     return bool(items) and all(d["date"] < today.isoformat() for i in items for d in i.days)
 
 
-def render(items, draft: dict, today: date, label: str | None = None, flags: dict | None = None) -> str:
+def _span(days):
+    return days[0] if len(days) == 1 else f"{days[0]} – {days[-1]}"
+
+
+def render(items, draft: dict, today: date, label: str | None = None, flags: dict | None = None,
+           covered_days: list[str] | None = None) -> str:
     flags = flags or {}
+    span = _span(covered_days) if covered_days else "the covered period"
     L = [f"# Innlandet hazard digest — {today.isoformat()}", ""]
     if label:
         L += [f"> **{label}**", ""]
     if _is_replay(items, today):
         L += ["> **ARCHIVED REPLAY:** every warning below is dated before today. This is not a current warning.", ""]
     if not items:
-        L += ["Ingen flom- eller jordskredvarsler på gult nivå eller høyere i Innlandet de neste tre dagene.",
-              "No flood or landslide warnings at yellow level or above in Innlandet for the next three days.", ""]
+        L += [f"Ingen flom- eller jordskredvarsler på gult nivå eller høyere i Innlandet for {span}.",
+              f"No flood or landslide warnings at yellow level or above in Innlandet for {span}.", ""]
     else:
         by_id = {e["id"]: e for e in draft["entries"]}
         for it in items:
@@ -109,9 +143,11 @@ def render(items, draft: dict, today: date, label: str | None = None, flags: dic
 _BADGE = {2: ("#f2c94c", "#000"), 3: ("#f2994a", "#000"), 4: ("#eb5757", "#fff")}
 
 
-def render_html(items, draft: dict, today: date, label: str | None = None, flags: dict | None = None) -> str:
+def render_html(items, draft: dict, today: date, label: str | None = None, flags: dict | None = None,
+                covered_days: list[str] | None = None) -> str:
     flags = flags or {}
     esc = html.escape
+    span = _span(covered_days) if covered_days else "the covered period"
     banners = []
     if label:
         banners.append(f'<p class="warn"><b>{esc(label)}</b></p>')
@@ -136,8 +172,8 @@ def render_html(items, draft: dict, today: date, label: str | None = None, flags
             f"<p><small><b>Facts from source data:</b> {esc(facts_line(it))}</small></p>"
             f'<p lang="nb">{esc(e["text_nb"])}</p>'
             f'<p lang="en">{esc(e["text_en"])} <small>{esc(UNOFFICIAL_EN)}</small></p>{official}</section>')
-    body = "".join(cards) or ("<p>Ingen flom- eller jordskredvarsler på gult nivå eller høyere i Innlandet.</p>"
-                              "<p>No flood or landslide warnings at yellow level or above in Innlandet.</p>")
+    body = "".join(cards) or (f"<p>Ingen flom- eller jordskredvarsler på gult nivå eller høyere i Innlandet for {esc(span)}.</p>"
+                              f"<p>No flood or landslide warnings at yellow level or above in Innlandet for {esc(span)}.</p>")
     attribution = "<br>".join(esc(a) for a in sorted({config.ATTRIBUTION[i.hazard] for i in items}))
     return f"""<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width">
 <title>Innlandet hazard digest {today.isoformat()}</title>
@@ -164,7 +200,8 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
         raw = fetch.fetch_all(today) if live else fetch.load_dir(source_dir)             # stage 1
         items, stats = normalize.normalize(raw)                                          # stage 2
         log["stats"] = stats
-        check_data_quality(stats, today if live else None)
+        days = check_data_quality(stats, today if live else None)
+        log["covered_days"] = days
         flags = {i.id: f for i in items if (f := validate_mod.official_flags(i))}
         log["flags"] = flags
         (run_dir / "items.json").write_text(
@@ -174,9 +211,9 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
             result = validate_mod.validate(items, draft)
         else:
             draft, result = None, None
-            feedback, spent = None, 0.0
+            feedback, measured, assumed = None, 0.0, 0.0
             for attempt in range(1, config.MAX_DRAFT_ATTEMPTS + 1):                      # stage 3 + 4 with one repair
-                remaining = round(config.MAX_BUDGET_USD - spent, 4)
+                remaining = round(config.MAX_BUDGET_USD - measured - assumed, 4)
                 if backend != "template" and remaining < config.MIN_ATTEMPT_BUDGET_USD:
                     log["attempts"].append({"n": attempt, "backend": backend, "skipped": "run budget exhausted"})
                     break
@@ -184,9 +221,9 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
                     cand = draft_mod.BACKENDS[backend](items, feedback, remaining)
                 except Exception as e:  # agent/CLI failure: assume the whole remaining budget may be gone
                     log["attempts"].append({"n": attempt, "backend": backend, "error": str(e)[:300]})
-                    spent = config.MAX_BUDGET_USD
+                    assumed += remaining  # no cost report: treat what we granted as spent
                     break
-                spent += cand.get("cost_usd", 0.0)
+                measured += cand.get("cost_usd", 0.0)
                 res = validate_mod.validate(items, cand)
                 log["attempts"].append({"n": attempt, "backend": backend, "ok": res.ok,
                                         "problems": res.problems, "cost_usd": cand.get("cost_usd", 0)})
@@ -194,7 +231,8 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
                     draft, result = cand, res
                     break
                 feedback = res.feedback()
-            log["total_cost_usd"] = round(spent, 4)
+            log.update(cost_measured_usd=round(measured, 4), cost_assumed_usd=round(assumed, 4),
+                       total_cost_usd=round(measured + assumed, 4))
             if draft is None and backend != "template":                                  # graceful degradation
                 cand = draft_mod.draft_template(items)
                 res = validate_mod.validate(items, cand)
@@ -205,8 +243,8 @@ def run(backend: str = "template", source_dir: Path | None = None, today: date |
             if draft is None:
                 raise RuntimeError("no valid draft produced (see log.json)")
         label = fixture_label(source_dir)
-        md = render(items, draft, today, label, flags)
-        page = render_html(items, draft, today, label, flags)
+        md = render(items, draft, today, label, flags, days)
+        page = render_html(items, draft, today, label, flags, days)
         final_problems = validate_mod.check_rendered(md) + validate_mod.check_rendered(page)
         if final_problems:
             raise RuntimeError("final output failed the output gate: " + "; ".join(final_problems[:3]))

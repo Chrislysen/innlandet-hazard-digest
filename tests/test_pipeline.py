@@ -122,7 +122,7 @@ class HistoricalReplayTests(unittest.TestCase):
     def test_complete_official_text_is_kept_unaltered(self):
         raw = fetch.load_dir(FIX / "historical_hamar_2023")
         src = [w for c in raw["flood"]["CountyList"] if c["Id"] == "34" for m in c["MunicipalityList"]
-               for w in (m["WarningList"] or []) if m["Id"] == "3403"][0]
+               for w in (m["WarningList"] or []) if m["Id"] == "3403" and w["ActivityLevel"] == "3"][0]
         md = pipeline.render(self.items, draft.draft_template(self.items), date(2026, 10, 28))
         for key in ("WarningText", "AdviceText", "ConsequenceText", "LevelMeaningText"):
             self.assertIn(" ".join(src[key].split()), md)  # nothing dropped or paraphrased
@@ -184,6 +184,91 @@ class MissingDataIsNotAllClearTests(unittest.TestCase):
             quality(self.raw(), today=date(2026, 11, 20))  # snapshot only covers late October
         quality(self.raw(), today=date(2026, 10, 28))
 
+
+
+class CoverageIsCompleteTests(unittest.TestCase):
+    """Regression cases from the third review: 'no warnings' needs the full expected coverage, not just some rows."""
+
+    TODAY = date(2026, 10, 28)
+
+    def raw(self):
+        return fetch.load_dir(FIX / "real_green")
+
+    def check(self, raw, today=None):
+        _, stats = normalize.normalize(raw)
+        return pipeline.check_data_quality(stats, today)
+
+    def innlandet(self, raw, hazards=("flood", "landslide")):
+        for h in hazards:
+            for c in raw[h]["CountyList"]:
+                if c["Id"] == "34":
+                    yield c
+
+    def test_complete_snapshot_covers_three_days(self):
+        self.assertEqual(self.check(self.raw(), self.TODAY), ["2026-10-28", "2026-10-29", "2026-10-30"])
+
+    def test_hamar_removed_from_both_hazards(self):
+        raw = self.raw()
+        for c in self.innlandet(raw):
+            c["MunicipalityList"] = [m for m in c["MunicipalityList"] if m["Id"] != "3403"]
+        for today in (None, self.TODAY):
+            with self.assertRaisesRegex(pipeline.DataQualityError, "Hamar"):
+                self.check(raw, today)
+
+    def test_hamar_flood_unassessed_level_zero(self):
+        raw = self.raw()
+        for c in self.innlandet(raw, ("flood",)):
+            for m in c["MunicipalityList"]:
+                if m["Id"] == "3403":
+                    for w in m["WarningList"]:
+                        w["ActivityLevel"] = "0"
+        for today in (None, self.TODAY):
+            with self.assertRaisesRegex(pipeline.DataQualityError, "Hamar"):
+                self.check(raw, today)
+
+    def test_later_days_removed_everywhere_live(self):
+        raw = self.raw()
+        for c in self.innlandet(raw):
+            for m in c["MunicipalityList"]:
+                m["WarningList"] = [w for w in m["WarningList"] if (w["ValidFrom"] or "")[:10] == "2026-10-28"]
+        with self.assertRaisesRegex(pipeline.DataQualityError, "2026-10-29"):
+            self.check(raw, self.TODAY)
+
+    def test_later_days_removed_everywhere_replay_states_only_what_is_covered(self):
+        raw = self.raw()
+        for c in self.innlandet(raw):
+            for m in c["MunicipalityList"]:
+                m["WarningList"] = [w for w in m["WarningList"] if (w["ValidFrom"] or "")[:10] == "2026-10-28"]
+        days = self.check(raw)
+        self.assertEqual(days, ["2026-10-28"])
+        items, _ = normalize.normalize(raw)
+        text = pipeline.render(items, draft.draft_template(items), self.TODAY, None, {}, days)
+        self.assertNotIn("tre dagene", text)
+        self.assertNotIn("three days", text)
+        self.assertIn("2026-10-28", text)
+
+    def test_one_municipality_missing_one_day(self):
+        raw = self.raw()
+        for c in self.innlandet(raw, ("landslide",)):
+            for m in c["MunicipalityList"]:
+                if m["Id"] == "3403":
+                    m["WarningList"] = [w for w in m["WarningList"] if (w["ValidFrom"] or "")[:10] != "2026-10-30"]
+        with self.assertRaisesRegex(pipeline.DataQualityError, "landslide"):
+            self.check(raw)
+
+    def test_all_clear_text_names_the_covered_days(self):
+        raw = self.raw()
+        days = self.check(raw, self.TODAY)
+        items, _ = normalize.normalize(raw)
+        text = pipeline.render(items, draft.draft_template(items), self.TODAY, None, {}, days)
+        self.assertIn("2026-10-28 – 2026-10-30", text)
+
+    def test_all_fixtures_have_complete_coverage(self):
+        for name in ("real_green", "synthetic_orange", "synthetic_injection", "historical_hamar_2023"):
+            self.assertTrue(self.check(fetch.load_dir(FIX / name)), name)
+
+    def test_reference_list_has_46_unique_ids(self):
+        self.assertEqual(len(config.expected_municipalities()), 46)
 
 class ValidatorGapsTests(unittest.TestCase):
     def setUp(self):
@@ -282,6 +367,24 @@ class RunBudgetAndContextTests(unittest.TestCase):
         self.assertEqual(len(calls), 1)  # the second attempt must NOT get a fresh allowance
         self.assertLessEqual(log["total_cost_usd"], config.MAX_BUDGET_USD)
         self.assertTrue(log["degraded"])  # fell back to the deterministic template
+
+    def test_failed_call_counts_granted_budget_as_assumed_cost(self):
+        def crashing(items, feedback=None, budget=None):
+            raise RuntimeError("cli failed")
+
+        with tempfile.TemporaryDirectory() as tmp:
+            old = (config.OUT_DIR, config.FAILURE_STREAK_FILE, config.KILL_FILE)
+            config.OUT_DIR = Path(tmp) / "out"
+            config.FAILURE_STREAK_FILE = config.OUT_DIR / ".streak"
+            config.KILL_FILE = Path(tmp) / "KILL"
+            pipeline.draft_mod.BACKENDS["crash"] = crashing
+            try:
+                log = json.loads((pipeline.run("crash", FIX / "synthetic_orange") / "log.json").read_text(encoding="utf-8"))
+            finally:
+                del pipeline.draft_mod.BACKENDS["crash"]
+                config.OUT_DIR, config.FAILURE_STREAK_FILE, config.KILL_FILE = old
+        self.assertEqual(log["cost_measured_usd"], 0.0)
+        self.assertEqual(log["cost_assumed_usd"], config.MAX_BUDGET_USD)
 
     def test_all_context_files_are_loaded(self):
         text = draft.load_context()

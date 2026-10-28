@@ -8,7 +8,7 @@ before a human approves it. Public data only; no personal data.
 `fetch` (NVE API) -> `normalize` (county 34, level >= 2) -> `draft` (LLM agent, no tools, budget-capped; or deterministic template)
 -> `validate` (code: exact-match fields, completeness, no unsupported numbers/dates/colours/links/advice words, injection scan, final-output gate) -> **human `approve`**.
 Code cannot judge the meaning of free sentences, so a person reads the summary before publishing.
-If nothing is at yellow level or above, the LLM is skipped and a deterministic all-clear is produced. Missing, unassessed (level 0), malformed or stale data fails the run instead of producing an all-clear.
+If nothing is at yellow level or above, the LLM is skipped and a deterministic all-clear is produced. The run fails instead of producing an all-clear unless every one of the 46 expected municipalities (`data/reference/`) has an assessed level for every expected day, for both hazards. An all-clear names the dates it covers.
 
 ## Requirements
 - Python 3.11+ (standard library only)
@@ -52,7 +52,7 @@ Data: "Varsler fra Flomvarslingen i Norge og www.varsom.no" / "Varsler fra Jords
 ## Safe operation (summary; details in white paper)
 - **Permission scoping:** agent runs with `--tools "" --strict-mcp-config --setting-sources ""` (no tools/MCP/skills); only the harness touches files and network.
 - **Secrets:** none in repo; the CLI uses the user's own login/env. `.env` is git-ignored.
-- **Cost control:** one USD 0.25 budget shared by all attempts of a run (each attempt gets only the remainder); max 2 attempts.
+- **Cost control:** one USD 0.25 limit per run: each attempt is passed only the remainder as the CLI's own budget limit (max 2 attempts). `log.json` records `cost_measured_usd` (reported by the CLI) separately from `cost_assumed_usd` (the granted remainder is assumed spent if a call fails without a report).
 - **Human gate:** nothing is published until `approve`; `approve` refuses runs that failed validation.
 - **Kill switch:** `KILL` file halts all runs; auto-engaged after 3 consecutive failed runs (`python -m hazard status`).
 

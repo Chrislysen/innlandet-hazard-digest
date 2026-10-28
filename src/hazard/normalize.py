@@ -45,7 +45,8 @@ def normalize(raw: dict[str, dict]) -> tuple[list[Item], dict]:
     """Return (items, stats). Only county 34 and level >= MIN_LEVEL survive."""
     items: dict[str, Item] = {}
     stats = {"municipalities_seen": 0, "warnings_seen": 0, "dropped_green": 0, "dropped_other_county": 0,
-             "invalid_levels": 0, "valid_by_hazard": {h: 0 for h in raw}}
+             "invalid_levels": 0, "valid_by_hazard": {h: 0 for h in raw},
+             "coverage": {h: {} for h in raw}}  # hazard -> municipality id -> dates with an assessed level (1-4)
     valid_dates: set[str] = set()
     for hazard, payload in raw.items():
         for county in payload["CountyList"]:
@@ -55,6 +56,7 @@ def normalize(raw: dict[str, dict]) -> tuple[list[Item], dict]:
             for m in county["MunicipalityList"] or []:
                 stats["municipalities_seen"] += 1
                 assessed = False
+                covered = stats["coverage"][hazard].setdefault(str(m["Id"]), set())
                 for w in m.get("WarningList") or []:
                     stats["warnings_seen"] += 1
                     try:
@@ -66,6 +68,7 @@ def normalize(raw: dict[str, dict]) -> tuple[list[Item], dict]:
                         continue
                     assessed = True
                     valid_dates.add((w.get("ValidFrom") or "")[:10])
+                    covered.add((w.get("ValidFrom") or "")[:10])
                     if level < config.MIN_LEVEL:
                         stats["dropped_green"] += 1
                         continue
@@ -94,6 +97,8 @@ def normalize(raw: dict[str, dict]) -> tuple[list[Item], dict]:
                 if assessed:
                     stats["valid_by_hazard"][hazard] += 1
     stats["valid_dates"] = sorted(d for d in valid_dates if d)
+    stats["coverage"] = {h: {mid: sorted(d for d in ds if d) for mid, ds in cov.items()}
+                         for h, cov in stats["coverage"].items()}
     out = sorted(items.values(), key=lambda i: (-i.max_level, i.municipality_name, i.hazard))
     for it in out:
         it.days.sort(key=lambda x: x["date"])
