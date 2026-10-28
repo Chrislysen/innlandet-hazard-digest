@@ -27,7 +27,7 @@ If stage 2 finds nothing to warn about, stage 3 is skipped (deterministic all-cl
 - [x] Risk assessment (what fails + what we do)
 - [x] Repository link
 - [x] Appendix: prompt logs (max 2 pages)
-- [ ] Appendix: meeting reports (placeholder until the team meeting is written up from the recording)
+- [x] Appendix: meeting reports (Meeting 01 held 2026-10-28; see `logs/meetings/`)
 ### Walking skeleton
 - [x] One path runs end to end: real input -> harness -> checkable output (live NVE run verified 2026-10-28)
 - [x] README that lets anyone reproduce the run

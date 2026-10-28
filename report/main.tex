@@ -15,7 +15,7 @@
 \title{Verified Hazard Digests for Innlandet:\\ An Agentic Harness for Flood and Landslide Warnings}
 
 \author{%
-  Christian Lysentsoen \And [Partner name] \\
+  Christian Lysentsoen \And Sindre Gotaas \\
   KIUA-2003, University of Inland Norway, Hamar \\
   Compulsory 2: plan and walking skeleton
 }
@@ -131,8 +131,22 @@ Excerpts from the coding-assistant conversation, with our corrections. The assis
 \paragraph{P4 -- external review, 28 Oct (excerpts, adopted after checking).} ``Missing data can incorrectly become \textquotedblleft no warnings.\textquotedblright'' ``\textquotedblleft Every fact verified by code\textquotedblright\ is not true.'' ``The advertised \$0.25 run budget is actually applied per attempt.'' Each point was checked against the code, repaired and covered by new tests. An earlier review's archived warning was re-fetched from the live API and matched byte for byte; we adopted its advice to keep official text complete and label English as unofficial, and did not adopt its advice to reduce scope to one municipality.
 
 \section{Meeting reports}
-\paragraph{Preparation (not a team meeting).} On 28 Oct one student worked with the coding assistant to survey data sources and build the first skeleton; the decisions above come from that session and from the two reviews.
+\paragraph{Preparation (not a team meeting).} On 28 Oct one student worked with the coding assistant to survey data sources and build the first skeleton; the design decisions above come from that session and from the external reviews, and were then presented to the second author in Meeting 01.
 
-\paragraph{Meeting 01 -- [date], [Partner name] and Christian Lysentsoen.} \textbf{[To be written from the recording of the meeting before submission: goal, what was discussed, decisions, who does what, actions.]}
+\paragraph{Meeting 01 -- 28 Oct 2026, Christian Lysentsoen and Sindre Gotaas.} Record written from Christian's account of the meeting.
+
+\emph{Goal.} Bring the second author up to date on the project: what was built, why, and how.
+
+\emph{Discussed.}
+\begin{itemize}
+  \item Christian presented the project: the assignment, why NVE's flood and landslide warnings were chosen, the five-stage pipeline (fetch, normalize, draft, validate, human approval), and the repository and report as they stand.
+  \item We looked at the NVE data together. We agreed it is a good data set for this project: open, structured and usable, so that its information can be handled and checked in code.
+  \item We discussed how the information from NVE should be handled in the workflow.
+  \item Christian described the errors found during development, how the system was tested, how each problem was troubleshot and how it was fixed. These are recorded in \texttt{logs/failures.md}.
+\end{itemize}
+
+\emph{Outcome.} Both authors consider the NVE warning data a suitable basis for the project. Sindre Gotaas is listed as second author.
+
+\emph{Not yet settled, for the next meeting.} How the exam work is divided between us (the evaluation harness and test set; the two stress tests and the safe-operation evidence); the meeting rhythm and who writes the notes; and repository access for the second author.
 
 \end{document}
