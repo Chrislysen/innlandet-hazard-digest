@@ -15,7 +15,7 @@
 \title{Verified Hazard Digests for Innlandet:\\ An Agentic Harness for Flood and Landslide Warnings}
 
 \author{%
-  Christian Lysentsoen \quad Sindre Gotaas \\
+  Christian Lysenstøen \quad Sindre Gotaas \\
   KIUA-2003, University of Inland Norway, Hamar \\
   Compulsory 2: plan and walking skeleton
 }
@@ -89,10 +89,10 @@ The skeleton's validator is the core of the later evaluation harness. We will ad
 \toprule
 Date & Milestone \\
 \midrule
-30 Oct, 12:00 & Compulsory 2 (report and skeleton) \\
-31 Oct -- 3 Nov & Evaluation harness: test set (typical, boundary, $\geq 1$ must-reject), regression runner, quantitative and qualitative report; capture real past warning periods from the API \\
-4 -- 8 Nov & Stress tests: input perturbation (prompt-injection variants) and dependency failure (outage, malformed or truncated payload); break, repair, re-verify \\
-9 -- 22 Nov & Live demonstrations (weeks 46--47): rehearse one week before; fix anything seen live \\
+6 Nov, 11:59 & Compulsory 2 (report and skeleton; extended deadline) \\
+7 -- 11 Nov & Evaluation harness: test set (typical, boundary, $\geq 1$ must-reject), regression runner, quantitative and qualitative report; capture real past warning periods from the API \\
+12 -- 15 Nov & Stress tests: input perturbation (prompt-injection variants) and dependency failure (outage, malformed or truncated payload); break, repair, re-verify \\
+9 -- 22 Nov & Live demonstrations (weeks 46--47, our slot as set on Canvas): rehearse before the slot; fix anything seen live \\
 23 Nov -- 2 Dec & White paper (7--8 pages), full evaluation log, $\geq 8$ meeting reports, tag \texttt{exam} \\
 3 Dec, 11:59 & White paper submitted in Wiseflow \\
 \bottomrule
@@ -108,7 +108,7 @@ Scope is cut before quality: avalanche and weather inputs are extensions only if
   \item[Model variance and change.] Output format or quality may drift between runs or model versions. \emph{Mitigation:} schema-constrained output, a fixed test set re-run after any change, and the deterministic fallback.
   \item[Validator too strict or too weak.] Strict colour or number checks may reject good text; weak checks miss errors. \emph{Mitigation:} measure false rejects and misses on the test set and tune with evidence.
   \item[Little real warning data.] Warnings are rare in dry periods, so we rely on synthetic cases. \emph{Mitigation:} label them clearly and build test cases from real historical periods where the API has them.
-  \item[Time.] Two people and about five weeks. \emph{Mitigation:} the skeleton already runs; remaining work is evaluation, stress testing and writing, in that order.
+  \item[Time.] Two people and about four weeks. \emph{Mitigation:} the skeleton already runs; remaining work is evaluation, stress testing and writing, in that order.
 \end{description}
 
 \section{Repository}
@@ -131,7 +131,7 @@ Representative excerpts from interactions with the coding agent used during deve
 \paragraph{P4 -- external review (excerpts), 28 Oct.} \emph{Decision:} we adopted the points that held up when checked and rejected one. \emph{Review excerpts:} ``Missing data can incorrectly become `no warnings'.''; ``\,`Every fact verified by code' is not true.''; ``The advertised \$0.25 run budget is actually applied per attempt.'' \emph{Our check:} each point was checked against the code, repaired and covered by new tests. An earlier review's archived warning was re-fetched from the live API and matched byte for byte; we adopted its advice to keep official text complete and label English as unofficial, and did not adopt its advice to reduce scope to one municipality.
 
 \section{Meeting reports}
-\paragraph{Meeting 01 -- 28 Oct 2026, Christian Lysentsoen and Sindre Gotaas.} Record written from Christian's account of the meeting.
+\paragraph{Meeting 01 -- 28 Oct 2026, Christian Lysenstøen and Sindre Gotaas.} Record written from Christian's account of the meeting.
 
 \emph{Goal.} Bring the second author up to date on the project: what was built, why, and how.
 

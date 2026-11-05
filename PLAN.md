@@ -51,7 +51,7 @@ If stage 2 finds nothing to warn about, stage 3 is skipped (deterministic all-cl
 - Meeting reports: `logs/meetings/` — need >=8 by the exam. Prompt logs: `logs/prompts.md`.
 
 ## Schedule (working backwards)
-- Compulsory 2 deadline: 30 Oct 2026 12:00 (a Friday; **confirm on Canvas**, not in the PDF)
+- Compulsory 2 deadline: 6 Nov 2026 11:59 (extended by the teacher from 30 Oct 12:00)
 - Weeks 46-47 (9-22 Nov 2026): live demo — rehearse one week before
 - 3 Dec 2026 11:59: white paper via Wiseflow, repo tagged `exam`
 - After C2: eval harness + test set -> stress tests + repairs -> safe-operation evidence -> white paper

@@ -21,6 +21,7 @@ $env:PYTHONPATH = "src"; python -m hazard demo
 Builds and opens `out/demo.html`: every stage on three scenarios, plus a panel where the validator catches six kinds of tampered drafts.
 
 ## Reproduce a run (PowerShell, from repo root)
+On macOS/Linux, use `export PYTHONPATH=src` instead of `$env:PYTHONPATH = "src"`; the other commands are the same.
 ```powershell
 $env:PYTHONPATH = "src"
 
